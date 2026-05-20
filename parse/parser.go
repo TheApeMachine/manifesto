@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -31,6 +32,12 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		return nil, fmt.Errorf("parse program yaml: %w", err)
 	}
 
+	includes := document.Includes
+
+	if len(includes) == 0 {
+		includes = document.Include
+	}
+
 	rawSteps := document.Main
 
 	if len(rawSteps) == 0 {
@@ -45,7 +52,7 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 
 	return &ast.Program{
 		Name:       document.Name,
-		Includes:   document.Includes,
+		Includes:   includes,
 		Variables:  document.Variables,
 		State:      document.System.Runtime.State,
 		Schedulers: document.System.Runtime.Schedulers,
@@ -58,46 +65,145 @@ func (parser *Parser) normalizeSteps(rawSteps []rawStep) ([]ast.Step, error) {
 	steps := make([]ast.Step, 0, len(rawSteps))
 
 	for _, rawStep := range rawSteps {
-		step := ast.Step{
-			ID:     rawStep.ID,
-			Op:     rawStep.Op,
-			Graph:  rawStep.Graph,
-			Config: rawStep.Config,
-			Loop:   rawStep.Loop,
-		}
-
-		inputs, err := parser.normalizePorts(rawStep.In)
+		step, err := parser.normalizeStep(rawStep)
 
 		if err != nil {
 			return nil, err
 		}
 
-		outputs, err := parser.normalizePorts(rawStep.Out)
-
-		if err != nil {
-			return nil, err
-		}
-
-		step.In = inputs
-		step.Out = outputs
-
-		if len(rawStep.Body) == 0 {
-			steps = append(steps, step)
-
-			continue
-		}
-
-		body, bodyErr := parser.normalizeSteps(rawStep.Body)
-
-		if bodyErr != nil {
-			return nil, bodyErr
-		}
-
-		step.Body = body
 		steps = append(steps, step)
 	}
 
 	return steps, nil
+}
+
+func (parser *Parser) normalizeStep(rawStep rawStep) (ast.Step, error) {
+	step := ast.Step{
+		ID:     rawStep.ID,
+		Op:     rawStep.Op,
+		Graph:  rawStep.Graph,
+		Config: rawStep.Config,
+		Loop:   rawStep.Loop,
+	}
+
+	if step.Op == "" && rawStep.Repeat != "" {
+		step.Op = parser.repeatOp(rawStep)
+	}
+
+	if step.Config == nil {
+		step.Config = make(map[string]any)
+	}
+
+	if err := parser.mergePortMaps(rawStep, &step); err != nil {
+		return ast.Step{}, err
+	}
+
+	if rawStep.Text != "" {
+		step.In["text"] = rawStep.Text
+	}
+
+	if rawStep.Tokenizer != "" {
+		step.Config["tokenizer"] = rawStep.Tokenizer
+	}
+
+	if rawStep.Scheduler != "" {
+		step.Config["scheduler"] = rawStep.Scheduler
+	}
+
+	if rawStep.Image != "" {
+		step.In["image"] = rawStep.Image
+	}
+
+	if rawStep.Source != "" {
+		if step.Loop == nil {
+			step.Loop = &ast.Loop{}
+		}
+
+		step.Loop.Over = rawStep.Source
+		step.Loop.As = rawStep.As
+	}
+
+	if rawStep.StepIndex != "" {
+		step.In["step_index"] = rawStep.StepIndex
+	}
+
+	if rawStep.Latents != "" {
+		step.In["latents"] = rawStep.Latents
+	}
+
+	if rawStep.Velocity != "" {
+		step.In["velocity"] = rawStep.Velocity
+	}
+
+	if rawStep.Update != "" {
+		step.Config["update"] = rawStep.Update
+	}
+
+	if rawStep.Target != "" {
+		step.Config["target"] = rawStep.Target
+	}
+
+	if len(rawStep.Body) == 0 {
+		return step, nil
+	}
+
+	body, bodyErr := parser.normalizeSteps(rawStep.Body)
+
+	if bodyErr != nil {
+		return ast.Step{}, bodyErr
+	}
+
+	step.Body = body
+
+	return step, nil
+}
+
+func (parser *Parser) repeatOp(rawStep rawStep) string {
+	if rawStep.Until != "" || strings.EqualFold(rawStep.Repeat, "until_eof") {
+		return "control.loop_until_eof"
+	}
+
+	return "control.loop_count"
+}
+
+func (parser *Parser) mergePortMaps(rawStep rawStep, step *ast.Step) error {
+	inputs, err := parser.normalizePorts(rawStep.In)
+
+	if err != nil {
+		return err
+	}
+
+	if inputs == nil {
+		inputs = make(map[string]string)
+	}
+
+	for key, value := range rawStep.Inputs {
+		inputs[key] = value
+	}
+
+	step.In = inputs
+
+	outputs, err := parser.normalizePorts(rawStep.Out)
+
+	if err != nil {
+		return err
+	}
+
+	if outputs == nil {
+		outputs = make(map[string]string)
+	}
+
+	for key, value := range rawStep.Outputs {
+		outputs[key] = value
+	}
+
+	step.Out = outputs
+
+	if step.Loop == nil && rawStep.Repeat != "" && rawStep.Op == "" {
+		step.Loop = &ast.Loop{Repeat: rawStep.Repeat}
+	}
+
+	return nil
 }
 
 func (parser *Parser) normalizePorts(node yaml.Node) (map[string]string, error) {

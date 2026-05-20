@@ -54,5 +54,23 @@ func (registry *Registry) Recipe(className string) (*ast.Recipe, error) {
 		return nil, err
 	}
 
-	return registry.catalog.LoadRecipe(entry.Include)
+	recipe, err := registry.catalog.LoadRecipe(entry.Include)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(entry.Variables) == 0 {
+		return recipe, nil
+	}
+
+	if recipe.Config == nil {
+		recipe.Config = make(map[string]ast.Binding, len(entry.Variables))
+	}
+
+	for name, binding := range entry.Variables {
+		recipe.Config[name] = binding
+	}
+
+	return recipe, nil
 }

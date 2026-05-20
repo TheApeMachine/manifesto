@@ -13,6 +13,7 @@ type ProgramDocument struct {
 	Kind      string            `yaml:"kind"`
 	Name      string            `yaml:"name"`
 	Includes  map[string]string `yaml:"includes"`
+	Include   map[string]string `yaml:"include"`
 	Variables map[string]any    `yaml:"variables"`
 	Main      []rawStep         `yaml:"main"`
 	System    programSystem     `yaml:"system"`
@@ -31,12 +32,27 @@ type programRuntime struct {
 }
 
 type rawStep struct {
-	ID     string         `yaml:"id"`
-	Op     string         `yaml:"op"`
-	In     yaml.Node      `yaml:"in"`
-	Out    yaml.Node      `yaml:"out"`
-	Graph  string         `yaml:"graph"`
-	Config map[string]any `yaml:"config"`
-	Loop   *ast.Loop      `yaml:"loop"`
-	Body   []rawStep      `yaml:"steps"`
+	ID        string            `yaml:"id"`
+	Op        string            `yaml:"op"`
+	In        yaml.Node         `yaml:"in"`
+	Out       yaml.Node         `yaml:"out"`
+	Inputs    map[string]string `yaml:"inputs"`
+	Outputs   map[string]string `yaml:"outputs"`
+	Graph     string            `yaml:"graph"`
+	Config    map[string]any    `yaml:"config"`
+	Loop      *ast.Loop         `yaml:"loop"`
+	Body      []rawStep         `yaml:"steps"`
+	Repeat    string            `yaml:"repeat"`
+	Until     string            `yaml:"until_eof,omitempty"`
+	Source    string            `yaml:"source"`
+	As        string            `yaml:"as"`
+	Text      string            `yaml:"text"`
+	Tokenizer string            `yaml:"tokenizer"`
+	Scheduler string            `yaml:"scheduler"`
+	Image     string            `yaml:"image"`
+	Update    string            `yaml:"update"`
+	Target    string            `yaml:"target"`
+	StepIndex string            `yaml:"step_index"`
+	Latents   string            `yaml:"latents"`
+	Velocity  string            `yaml:"velocity"`
 }

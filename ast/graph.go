@@ -11,6 +11,7 @@ type Graph struct {
 	Inputs         []string
 	Outputs        map[string]string
 	ExecutionDType dtype.DType
+	Metadata       map[string]any
 }
 
 /*

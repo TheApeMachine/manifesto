@@ -52,6 +52,12 @@ func (lowerer *Lowerer) Graph(manifestGraph *ast.Graph) (*Graph, error) {
 			computeNode.SetAttribute(key, Attribute(stringifyAttribute(value)))
 		}
 
+		if manifestNode.Weights != nil {
+			computeNode.SetMetadata("weight_name", manifestNode.Weights.TensorName)
+			computeNode.SetMetadata("weight_dtype", manifestNode.Weights.DType.String())
+			computeNode.SetMetadata("weight_shape", manifestNode.Weights.Shape)
+		}
+
 		computeGraph.AddNode(computeNode)
 		nodesByID[manifestNode.ID] = computeNode
 	}

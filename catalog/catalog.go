@@ -61,25 +61,33 @@ func (catalog *FS) LoadRecipe(name string) (*ast.Recipe, error) {
 	filename := recipePath(name)
 	raw, err := fs.ReadFile(catalog.files, filename)
 
-	if err != nil {
+	if err == nil {
+		recipe := &ast.Recipe{Name: name}
+
+		if parseErr := yaml.Unmarshal(raw, recipe); parseErr != nil {
+			return nil, fmt.Errorf("catalog recipe parse %q: %w", name, parseErr)
+		}
+
+		return recipe, nil
+	}
+
+	topology, blockErr := catalog.LoadBlock(name)
+
+	if blockErr != nil {
 		return nil, fmt.Errorf("catalog recipe %q: %w", name, err)
 	}
 
-	recipe := &ast.Recipe{Name: name}
-
-	if err := yaml.Unmarshal(raw, recipe); err != nil {
-		return nil, fmt.Errorf("catalog recipe parse %q: %w", name, err)
-	}
-
-	return recipe, nil
+	return &ast.Recipe{
+		Name:     name,
+		Topology: topology,
+	}, nil
 }
 
 func (catalog *FS) LoadBlock(name string) (*ast.Topology, error) {
-	filename := blockPath(name)
-	raw, err := fs.ReadFile(catalog.files, filename)
+	raw, err := catalog.readBlockBytes(name)
 
 	if err != nil {
-		return nil, fmt.Errorf("catalog block %q: %w", name, err)
+		return nil, err
 	}
 
 	topology := &ast.Topology{}
@@ -89,6 +97,27 @@ func (catalog *FS) LoadBlock(name string) (*ast.Topology, error) {
 	}
 
 	return topology, nil
+}
+
+func (catalog *FS) readBlockBytes(name string) ([]byte, error) {
+	candidates := []string{
+		blockPath(name),
+		architecturePath(name),
+	}
+
+	var lastErr error
+
+	for _, filename := range candidates {
+		raw, err := fs.ReadFile(catalog.files, filename)
+
+		if err == nil {
+			return raw, nil
+		}
+
+		lastErr = err
+	}
+
+	return nil, fmt.Errorf("catalog block %q: %w", name, lastErr)
 }
 
 func (catalog *FS) ReadRaw(filename string) ([]byte, error) {
@@ -107,6 +136,16 @@ func recipePath(name string) string {
 
 func blockPath(name string) string {
 	return path.Join("model", "block", normalizeName(name)+".yml")
+}
+
+func architecturePath(name string) string {
+	if !strings.HasPrefix(name, "model.architecture.") {
+		return ""
+	}
+
+	suffix := strings.TrimPrefix(name, "model.architecture.")
+
+	return path.Join("model", "architecture", suffix+".yml")
 }
 
 func normalizeName(name string) string {
