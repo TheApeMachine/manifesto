@@ -8,6 +8,7 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/hfconfig"
 	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/parse"
 	"github.com/theapemachine/manifesto/resolve"
@@ -83,10 +84,38 @@ func (compiler *Compiler) compileModelInclude(
 	includePath string,
 	cacheDir string,
 ) (*ast.Graph, *ir.Graph, error) {
-	raw, err := fs.ReadFile(assetFS, includePath)
+	var raw []byte
+	var err error
 
-	if err != nil {
-		return nil, nil, fmt.Errorf("read model include %q: %w", includePath, err)
+	if strings.HasPrefix(includePath, "hf://") {
+		repoID := strings.TrimPrefix(includePath, "hf://")
+		location := resolve.RepoLocation{
+			RepoID:   repoID,
+			RepoType: resolve.ModelRepo,
+			Revision: "main",
+		}
+
+		reader, _, err := compiler.resolver.Open(ctx, location, "config.json", cacheDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to open config.json for %s: %w", repoID, err)
+		}
+		defer reader.Close()
+
+		config, err := hfconfig.ParseConfig(reader)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to parse config.json for %s: %w", repoID, err)
+		}
+
+		yamlStr, err := hfconfig.GenerateYAML(config, repoID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to generate YAML for %s: %w", repoID, err)
+		}
+		raw = []byte(yamlStr)
+	} else {
+		raw, err = fs.ReadFile(assetFS, includePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read model include %q: %w", includePath, err)
+		}
 	}
 
 	block, err := parse.BlockModelFromYAML(raw)
@@ -303,6 +332,10 @@ func NormalizeIncludePath(name string) string {
 	trimmed := strings.TrimSpace(name)
 
 	if trimmed == "" {
+		return trimmed
+	}
+
+	if strings.HasPrefix(trimmed, "hf://") {
 		return trimmed
 	}
 

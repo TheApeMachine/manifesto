@@ -127,7 +127,7 @@ func (inferencer *ShapeInferencer) inferNode(
 		return inferencer.inferLinear(topologyNode.Config, inputShapes)
 	case "math.rmsnorm", "math.layernorm", "math.add",
 		"activation.gelu", "activation.silu", "activation.swiglu",
-		"positional.rope":
+		"positional.rope", "state.tensor", "state.write":
 		return inferencer.inferIdentity(inputShapes)
 	case "shape.view_as_heads":
 		return inferencer.inferViewAsHeads(topologyNode.Config, inputShapes)

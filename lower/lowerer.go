@@ -39,11 +39,25 @@ func (lowerer *Lowerer) Topology(
 		Outputs: make(map[string]string),
 	}
 
+	wireToNode := make(map[string]string)
+	for _, input := range topology.Inputs {
+		wireToNode[input] = input
+	}
+
 	for _, node := range topology.Nodes {
+		inputs := make([]string, len(node.In))
+		for i, inWire := range node.In {
+			if producer, ok := wireToNode[inWire]; ok {
+				inputs[i] = producer
+			} else {
+				inputs[i] = inWire // Fallback, though it might fail later
+			}
+		}
+
 		graphNode := &ast.GraphNode{
 			ID:         node.ID,
 			Op:         node.Op,
-			Inputs:     append([]string(nil), node.In...),
+			Inputs:     inputs,
 			Attributes: lowerer.cloneMap(node.Config),
 			Metadata: map[string]any{
 				"manifest_node_id": node.ID,
@@ -54,6 +68,10 @@ func (lowerer *Lowerer) Topology(
 			graphNode.Weights = &ast.BoundWeight{
 				TensorName: node.Weights.Weight,
 			}
+		}
+
+		for _, outWire := range node.Out {
+			wireToNode[outWire] = node.ID
 		}
 
 		graph.Nodes = append(graph.Nodes, graphNode)

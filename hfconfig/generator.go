@@ -1,0 +1,337 @@
+package hfconfig
+
+import (
+	"bytes"
+	"fmt"
+	"strings"
+	"text/template"
+)
+
+const llamaTemplate = `kind: Block
+category: model
+op: block.model.{{.ModelType}}
+name: {{.ModelName}}
+label: {{.ModelName}}
+description: Automatically generated manifest for {{.ModelName}}
+initial_width: 300
+inputs:
+  - name: input_ids
+    type: tensor
+    description: Input token IDs [batch, seq_len]
+outputs:
+  - name: logits
+    type: tensor
+    description: Output logits [batch, seq_len, vocab_size]
+
+system:
+  runtime:
+    type: model
+    backend: metal
+    model:
+      source: {{.Source}}
+      repo_type: model
+    tokenizer:
+      source: {{.Source}}
+      repo_type: model
+    generation:
+      max_new_tokens: 256
+      repetition_penalty: 1.1
+      temperature: 0.8
+      top_k: 50
+      top_p: 0.95
+      seed: 0
+      prompt_template: |+
+        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+        Cutting Knowledge Date: December 2023
+        Today Date: 26 Jul 2024
+
+        <|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        {{` + "`{{prompt}}`" + `}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+      stop_tokens: []
+      stop_special_tokens: true
+
+  topology:
+    inputs:
+      - input_ids
+    nodes:
+      - id: embed_tokens
+        op: embedding.token
+        in:
+          - input_ids
+        out:
+          - h_0
+        config:
+          vocab_size: {{.VocabSize}}
+          d_model: {{.HiddenSize}}
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_{{.NumHiddenLayers}}
+        repeat: {{.NumHiddenLayers}}
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: {{.RMSNormEps}}
+
+          - id: q_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - q_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.HiddenSize}}
+
+          - id: k_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - k_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.KVHiddenSize}}
+
+          - id: v_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - v_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.KVHiddenSize}}
+
+          - id: q_heads_${i}
+            op: shape.view_as_heads
+            in:
+              - q_proj_${i}
+            out:
+              - q_heads_${i}
+            config:
+              num_heads: {{.NumAttentionHeads}}
+
+          - id: k_heads_${i}
+            op: shape.view_as_heads
+            in:
+              - k_proj_${i}
+            out:
+              - k_heads_${i}
+            config:
+              num_heads: {{.NumKeyValueHeads}}
+
+          - id: v_heads_${i}
+            op: shape.view_as_heads
+            in:
+              - v_proj_${i}
+            out:
+              - v_heads_${i}
+            config:
+              num_heads: {{.NumKeyValueHeads}}
+
+          - id: rope_q_${i}
+            op: positional.rope
+            in:
+              - q_heads_${i}
+            out:
+              - q_rope_${i}
+            config:
+              base: {{.RopeTheta}}
+              head_dim: {{.HeadDim}}
+              mode: half
+              rope_type: llama3
+              rope_factor: 32.0
+              rope_low_freq_factor: 1.0
+              rope_high_freq_factor: 4.0
+              rope_original_context: 8192
+
+          - id: rope_k_${i}
+            op: positional.rope
+            in:
+              - k_heads_${i}
+            out:
+              - k_rope_${i}
+            config:
+              base: {{.RopeTheta}}
+              head_dim: {{.HeadDim}}
+              mode: half
+              rope_type: llama3
+              rope_factor: 32.0
+              rope_low_freq_factor: 1.0
+              rope_high_freq_factor: 4.0
+              rope_original_context: 8192
+
+          - id: attn_${i}
+            op: attention.gqa
+            in:
+              - q_rope_${i}
+              - k_rope_${i}
+              - v_heads_${i}
+            out:
+              - attn_heads_${i}
+            config:
+              num_heads: {{.NumAttentionHeads}}
+              num_kv_heads: {{.NumKeyValueHeads}}
+              head_dim: {{.HeadDim}}
+              causal: true
+
+          - id: merge_attention_${i}
+            op: shape.merge_heads
+            in:
+              - attn_heads_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.HiddenSize}}
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: {{.RMSNormEps}}
+
+          - id: gate_up_proj_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - gate_up_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.IntermediateSize}}
+
+          - id: swiglu_${i}
+            op: activation.swiglu
+            in:
+              - gate_up_proj_${i}
+            out:
+              - swiglu_out_${i}
+
+          - id: down_proj_${i}
+            op: projection.linear
+            in:
+              - swiglu_out_${i}
+            out:
+              - down_proj_${i}
+            config:
+              in_features: {{.IntermediateSizeHalf}}
+              out_features: {{.HiddenSize}}
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - down_proj_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.rmsnorm
+        in:
+          - h_{{.NumHiddenLayers}}
+        out:
+          - final_norm
+        config:
+          eps: {{.RMSNormEps}}
+
+      - id: lm_head
+        op: projection.linear
+        in:
+          - final_norm
+        out:
+          - logits
+        config:
+          in_features: {{.HiddenSize}}
+          out_features: {{.VocabSize}}
+`
+
+// GenerateYAML converts a Hugging Face Config into a Manifesto YAML string.
+func GenerateYAML(config *Config, source string) (string, error) {
+	if len(config.Architectures) == 0 {
+		return "", fmt.Errorf("no architectures found in config")
+	}
+
+	arch := config.Architectures[0]
+	if !strings.Contains(strings.ToLower(arch), "llama") {
+		return "", fmt.Errorf("currently only Llama architectures are supported, got %s", arch)
+	}
+
+	tmpl, err := template.New("llama").Parse(llamaTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	headDim := config.HiddenSize / config.NumAttentionHeads
+	kvHiddenSize := config.NumKeyValueHeads * headDim
+
+	data := struct {
+		ModelType            string
+		ModelName            string
+		Source               string
+		VocabSize            int
+		HiddenSize           int
+		NumHiddenLayers      int
+		NumAttentionHeads    int
+		NumKeyValueHeads     int
+		RMSNormEps           float32
+		RopeTheta            float32
+		HeadDim              int
+		KVHiddenSize         int
+		IntermediateSize     int
+		IntermediateSizeHalf int
+	}{
+		ModelType:            config.ModelType,
+		ModelName:            arch,
+		Source:               source,
+		VocabSize:            config.VocabSize,
+		HiddenSize:           config.HiddenSize,
+		NumHiddenLayers:      config.NumHiddenLayers,
+		NumAttentionHeads:    config.NumAttentionHeads,
+		NumKeyValueHeads:     config.NumKeyValueHeads,
+		RMSNormEps:           config.RMSNormEps,
+		RopeTheta:            config.RopeTheta,
+		HeadDim:              headDim,
+		KVHiddenSize:         kvHiddenSize,
+		IntermediateSize:     config.IntermediateSize,
+		IntermediateSizeHalf: config.IntermediateSize / 2, // SwiGLU splits the intermediate size
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}

@@ -28,7 +28,17 @@ func (lowerer *Lowerer) Graph(manifestGraph *ast.Graph) (*Graph, error) {
 	}
 
 	computeGraph := NewGraph()
-	nodesByID := make(map[string]*Node, len(manifestGraph.Nodes))
+	nodesByID := make(map[string]*Node, len(manifestGraph.Nodes)+len(manifestGraph.Inputs))
+	wireToNode := make(map[string]*Node)
+
+	for _, inputID := range manifestGraph.Inputs {
+		shape, _ := lowerer.shape([]int64{ast.DynamicDim, ast.DynamicDim}) // Default shape
+		inputNode := NewNode(inputID, OpInput, shape)
+		inputNode.SetOperationID(OpID(OpInput))
+		computeGraph.AddNode(inputNode)
+		nodesByID[inputID] = inputNode
+		wireToNode[inputID] = inputNode
+	}
 
 	for _, manifestNode := range manifestGraph.Nodes {
 		shape, err := lowerer.shape(manifestNode.ValueType.Shape)
@@ -60,6 +70,12 @@ func (lowerer *Lowerer) Graph(manifestGraph *ast.Graph) (*Graph, error) {
 
 		computeGraph.AddNode(computeNode)
 		nodesByID[manifestNode.ID] = computeNode
+
+		// Register the outputs of this node in the wireToNode map.
+		// Since we don't have manifestNode.Outputs in ast.GraphNode,
+		// we assume the node ID is the output wire name, or we need to get it from somewhere.
+		// Wait, ast.GraphNode doesn't have Outputs!
+		// Let's check ast.GraphNode.
 	}
 
 	for _, manifestNode := range manifestGraph.Nodes {

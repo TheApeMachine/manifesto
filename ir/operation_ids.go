@@ -8,4 +8,8 @@ const (
 	OpProjectionLinear   OpID = "projection.linear"
 	OpConvolutionConv2D  OpID = "convolution.conv2d"
 	OpConvolutionConvT2D OpID = "convolution.conv_transpose2d"
+
+	// State Operations
+	OpStateTensor OpID = "state.tensor"
+	OpStateWrite  OpID = "state.write"
 )
