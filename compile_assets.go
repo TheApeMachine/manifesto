@@ -136,6 +136,12 @@ func (compiler *Compiler) compileModelInclude(
 		return nil, nil, err
 	}
 
+	topology, err = compiler.expander.ExpandTopology(topology)
+	
+	if err != nil {
+		return nil, nil, err
+	}
+
 	executionDType := dtype.Float32
 
 	graph, err := compiler.topology.Topology(topology, executionDType)
@@ -271,7 +277,12 @@ func (compiler *Compiler) compileTopologyModule(
 ) (*ast.Graph, *ir.Graph, error) {
 	executionDType := dtype.Float32
 
-	graph, err := compiler.topology.Topology(module.Topology, executionDType)
+	topology, err := compiler.expander.ExpandTopology(module.Topology)
+	if err != nil {
+		return nil, nil, newError(graphName, "expand", "expand program graph module", err)
+	}
+
+	graph, err := compiler.topology.Topology(topology, executionDType)
 
 	if err != nil {
 		return nil, nil, newError(graphName, "lower", "lower program graph module", err)

@@ -59,6 +59,8 @@ system:
     nodes:
       - id: embed_tokens
         op: embedding.token
+        weights:
+          weight: model.embed_tokens.weight
         in:
           - input_ids
         out:
@@ -84,6 +86,8 @@ system:
               - norm1_${i}
             config:
               eps: {{.RMSNormEps}}
+            weights:
+              weight: model.layers.${i}.input_layernorm.weight
 
           - id: q_proj_${i}
             op: projection.linear
@@ -94,6 +98,8 @@ system:
             config:
               in_features: {{.HiddenSize}}
               out_features: {{.HiddenSize}}
+            weights:
+              weight: model.layers.${i}.self_attn.q_proj.weight
 
           - id: k_proj_${i}
             op: projection.linear
@@ -104,6 +110,8 @@ system:
             config:
               in_features: {{.HiddenSize}}
               out_features: {{.KVHiddenSize}}
+            weights:
+              weight: model.layers.${i}.self_attn.k_proj.weight
 
           - id: v_proj_${i}
             op: projection.linear
@@ -114,6 +122,8 @@ system:
             config:
               in_features: {{.HiddenSize}}
               out_features: {{.KVHiddenSize}}
+            weights:
+              weight: model.layers.${i}.self_attn.v_proj.weight
 
           - id: q_heads_${i}
             op: shape.view_as_heads
@@ -204,6 +214,8 @@ system:
             config:
               in_features: {{.HiddenSize}}
               out_features: {{.HiddenSize}}
+            weights:
+              weight: model.layers.${i}.self_attn.o_proj.weight
 
           - id: add_1_${i}
             op: math.add
@@ -221,16 +233,42 @@ system:
               - norm2_${i}
             config:
               eps: {{.RMSNormEps}}
+            weights:
+              weight: model.layers.${i}.post_attention_layernorm.weight
 
-          - id: gate_up_proj_${i}
+          - id: gate_proj_${i}
             op: projection.linear
             in:
               - norm2_${i}
             out:
-              - gate_up_proj_${i}
+              - gate_proj_${i}
             config:
               in_features: {{.HiddenSize}}
               out_features: {{.IntermediateSize}}
+            weights:
+              weight: model.layers.${i}.mlp.gate_proj.weight
+
+          - id: up_proj_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - up_proj_${i}
+            config:
+              in_features: {{.HiddenSize}}
+              out_features: {{.IntermediateSize}}
+            weights:
+              weight: model.layers.${i}.mlp.up_proj.weight
+
+          - id: gate_up_concat_${i}
+            op: shape.concat
+            in:
+              - gate_proj_${i}
+              - up_proj_${i}
+            out:
+              - gate_up_proj_${i}
+            config:
+              dim: -1
 
           - id: swiglu_${i}
             op: activation.swiglu
@@ -248,6 +286,8 @@ system:
             config:
               in_features: {{.IntermediateSizeHalf}}
               out_features: {{.HiddenSize}}
+            weights:
+              weight: model.layers.${i}.mlp.down_proj.weight
 
           - id: add_2_${i}
             op: math.add
@@ -265,6 +305,8 @@ system:
           - final_norm
         config:
           eps: {{.RMSNormEps}}
+        weights:
+          weight: model.norm.weight
 
       - id: lm_head
         op: projection.linear
@@ -275,6 +317,8 @@ system:
         config:
           in_features: {{.HiddenSize}}
           out_features: {{.VocabSize}}
+        weights:
+          weight: {{if .TieWordEmbeddings}}model.embed_tokens.weight{{else}}lm_head.weight{{end}}
 `
 
 // GenerateYAML converts a Hugging Face Config into a Manifesto YAML string.
@@ -311,6 +355,7 @@ func GenerateYAML(config *Config, source string) (string, error) {
 		KVHiddenSize         int
 		IntermediateSize     int
 		IntermediateSizeHalf int
+		TieWordEmbeddings    bool
 	}{
 		ModelType:            config.ModelType,
 		ModelName:            arch,
@@ -326,6 +371,7 @@ func GenerateYAML(config *Config, source string) (string, error) {
 		KVHiddenSize:         kvHiddenSize,
 		IntermediateSize:     config.IntermediateSize,
 		IntermediateSizeHalf: config.IntermediateSize / 2, // SwiGLU splits the intermediate size
+		TieWordEmbeddings:    config.TieWordEmbeddings,
 	}
 
 	var buf bytes.Buffer

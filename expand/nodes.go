@@ -40,6 +40,7 @@ func (expander *Recipe) expandNode(node ast.Node, variables map[string]any) ([]a
 	for layerIndex := 0; layerIndex < count; layerIndex++ {
 		loopVars := expander.cloneVariables(variables)
 		loopVars[node.Index] = layerIndex
+		loopVars["next_"+node.Index] = layerIndex + 1
 
 		if node.Offset != nil {
 			offset, offsetErr := expander.repeatCount(node.Offset, loopVars)

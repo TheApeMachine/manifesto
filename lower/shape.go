@@ -275,13 +275,17 @@ func (inferencer *ShapeInferencer) inferConcat(
 		return [][]int64{ast.NewDynamicShape(3)}, nil
 	}
 
-	axis, err := inferencer.configInt64(config, "dim")
+	axis, err := inferencer.configInt64(config, "dim", "axis")
 
 	if err != nil {
 		axis = 1
 	}
 
 	output := cloneShape(inputShapes[0])
+
+	if axis < 0 {
+		axis += int64(len(output))
+	}
 
 	for _, inputShape := range inputShapes[1:] {
 		if len(output) != len(inputShape) {

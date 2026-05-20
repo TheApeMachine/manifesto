@@ -56,6 +56,22 @@ func (expander *Recipe) Topology(
 	}, nil
 }
 
+func (expander *Recipe) ExpandTopology(topology *ast.Topology) (*ast.Topology, error) {
+	if topology == nil {
+		return nil, nil
+	}
+
+	nodes, err := expander.expandNodes(topology.Nodes, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.Topology{
+		Inputs: topology.Inputs,
+		Nodes:  nodes,
+	}, nil
+}
+
 func (expander *Recipe) mergeChain(recipe *ast.Recipe) (*ast.Recipe, error) {
 	if recipe.Extends == "" {
 		return recipe, nil
