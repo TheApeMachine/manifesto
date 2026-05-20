@@ -260,20 +260,11 @@ system:
             weights:
               weight: model.layers.${i}.mlp.up_proj.weight
 
-          - id: gate_up_concat_${i}
-            op: shape.concat
-            in:
-              - gate_proj_${i}
-              - up_proj_${i}
-            out:
-              - gate_up_proj_${i}
-            config:
-              dim: -1
-
           - id: swiglu_${i}
             op: activation.swiglu
             in:
-              - gate_up_proj_${i}
+              - gate_proj_${i}
+              - up_proj_${i}
             out:
               - swiglu_out_${i}
 

@@ -8,7 +8,7 @@ Hosts implement this interface; manifesto never imports hub or terminal packages
 */
 type HostOps interface {
 	ReadLine(ctx context.Context) (string, error)
-	EmitToken(ctx context.Context, tokenID int) error
+	EmitToken(ctx context.Context, request EmitTokenRequest) error
 	WriteImage(ctx context.Context, request WriteImageRequest) error
 	Encode(ctx context.Context, request EncodeRequest) ([]int, error)
 }
@@ -19,6 +19,14 @@ EncodeRequest identifies a tokenizer for one encode step.
 type EncodeRequest struct {
 	Tokenizer string
 	Text      string
+}
+
+/*
+EmitTokenRequest identifies a tokenizer for one emit step.
+*/
+type EmitTokenRequest struct {
+	Tokenizer string
+	TokenID   int
 }
 
 /*

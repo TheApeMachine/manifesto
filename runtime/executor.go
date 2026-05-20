@@ -130,6 +130,8 @@ func (executor *Executor) runStep(
 		return executor.runTopKSample(ctx, step, values)
 	case "value.assign":
 		return executor.runAssign(step, values)
+	case "value.append":
+		return executor.runAppend(step, values)
 	case "scheduler.timesteps":
 		return executor.runSchedulerTimesteps(ctx, step, values)
 	case "scheduler.step":
@@ -276,7 +278,11 @@ func (executor *Executor) runEmitToken(
 			return fmt.Errorf("io.emit_token: host ops are required")
 		}
 
-		if err := executor.host.EmitToken(ctx, tokenID); err != nil {
+		tokenizerName, _ := step.Config["tokenizer"].(string)
+		if err := executor.host.EmitToken(ctx, EmitTokenRequest{
+			Tokenizer: tokenizerName,
+			TokenID:   tokenID,
+		}); err != nil {
 			return err
 		}
 	}
@@ -329,6 +335,12 @@ func (executor *Executor) runTopKSample(
 		return err
 	}
 
+	vocabSize := intFromConfig(step.Config, "vocab_size", 0)
+	if vocabSize > 0 && len(logits) > vocabSize {
+		// Only sample from the last token's logits
+		logits = logits[len(logits)-vocabSize:]
+	}
+
 	temperature := float32FromConfig(step.Config, "temperature", 1.0)
 	topK := intFromConfig(step.Config, "top_k", 50)
 
@@ -348,6 +360,41 @@ func (executor *Executor) runAssign(step ast.Step, values map[string]any) error 
 		for _, outRef := range step.Out {
 			values[outRef] = value
 		}
+	}
+
+	return nil
+}
+
+func (executor *Executor) runAppend(step ast.Step, values map[string]any) error {
+	targetRef, ok := step.Config["target"].(string)
+	if !ok {
+		return fmt.Errorf("value.append requires a target config")
+	}
+
+	targetValue, ok := values[targetRef]
+	if !ok {
+		return fmt.Errorf("value.append target %q not found", targetRef)
+	}
+
+	for _, ref := range step.In {
+		value := values[ref]
+
+		switch typedTarget := targetValue.(type) {
+		case []int:
+			if tokenID, err := tokenIDFromValue(value); err == nil {
+				targetValue = append(typedTarget, tokenID)
+			} else {
+				return fmt.Errorf("value.append cannot append %T to []int", value)
+			}
+		default:
+			return fmt.Errorf("value.append unsupported target type %T", targetValue)
+		}
+	}
+
+	values[targetRef] = targetValue
+
+	for _, outRef := range step.Out {
+		values[outRef] = targetValue
 	}
 
 	return nil
@@ -676,8 +723,27 @@ func sampleTopK(logits []float32, temperature float32, topK int) int {
 
 	scores := make([]scored, len(logits))
 
+	hasNaN := false
 	for index, value := range logits {
+		if value != value {
+			hasNaN = true
+		}
 		scores[index] = scored{index: index, value: value}
+	}
+
+	if hasNaN {
+		fmt.Println("LOGITS CONTAIN NANS!")
+	}
+
+	allZero := true
+	for _, value := range logits {
+		if value != 0.0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		fmt.Println("LOGITS ARE ALL ZERO!")
 	}
 
 	sort.Slice(scores, func(left, right int) bool {
