@@ -62,6 +62,48 @@ func TestShapeInferencer_Apply(t *testing.T) {
 			convey.So(graph.Nodes[3].ValueType.Shape, convey.ShouldResemble, []int64{ast.DynamicDim, ast.DynamicDim, 2048})
 		})
 	})
+
+	convey.Convey("Given a packed SwiGLU activation", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{"input_ids"},
+			Nodes: []ast.Node{
+				{
+					ID:  "embed",
+					Op:  "embedding.token",
+					In:  []string{"input_ids"},
+					Out: []string{"hidden"},
+					Config: map[string]any{
+						"vocab_size": int64(1024),
+						"d_model":    int64(3072),
+					},
+				},
+				{
+					ID:  "gate_up",
+					Op:  "projection.linear",
+					In:  []string{"hidden"},
+					Out: []string{"packed"},
+					Config: map[string]any{
+						"in_features":  int64(3072),
+						"out_features": int64(6144),
+					},
+				},
+				{
+					ID:  "swiglu",
+					Op:  "activation.swiglu",
+					In:  []string{"packed"},
+					Out: []string{"activated"},
+				},
+			},
+		}
+		lowerer := NewLowerer()
+
+		convey.Convey("It should halve the final dimension", func() {
+			graph, err := lowerer.Topology(topology, dtype.Float32)
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(graph.Nodes[2].ValueType.Shape, convey.ShouldResemble, []int64{ast.DynamicDim, ast.DynamicDim, 3072})
+		})
+	})
 }
 
 func TestLowerer_Topology(t *testing.T) {

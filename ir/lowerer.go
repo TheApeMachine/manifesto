@@ -62,10 +62,20 @@ func (lowerer *Lowerer) Graph(manifestGraph *ast.Graph) (*Graph, error) {
 			computeNode.SetAttribute(key, Attribute(stringifyAttribute(value)))
 		}
 
+		for key, value := range manifestNode.Metadata {
+			computeNode.SetMetadata(key, value)
+		}
+
 		if manifestNode.Weights != nil {
 			computeNode.SetMetadata("weight_name", manifestNode.Weights.TensorName)
 			computeNode.SetMetadata("weight_dtype", manifestNode.Weights.DType.String())
 			computeNode.SetMetadata("weight_shape", manifestNode.Weights.Shape)
+
+			if manifestNode.Weights.Slice != nil {
+				computeNode.SetMetadata("weight_slice_axis", manifestNode.Weights.Slice.Axis)
+				computeNode.SetMetadata("weight_slice_start", manifestNode.Weights.Slice.Start)
+				computeNode.SetMetadata("weight_slice_end", manifestNode.Weights.Slice.End)
+			}
 		}
 
 		computeGraph.AddNode(computeNode)

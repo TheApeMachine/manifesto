@@ -34,12 +34,7 @@ func (compiler *Compiler) CompileAssets(
 	}
 
 	for includeName, includePath := range output.Program.Includes {
-		graph, computeGraph, compileErr := compiler.compileModelInclude(
-			ctx,
-			assetFS,
-			includePath,
-			input.CacheDir,
-		)
+		graph, computeGraph, compileErr := compiler.compileProgramInclude(ctx, assetFS, includePath, input.CacheDir)
 
 		if compileErr != nil {
 			return nil, newError(includePath, "compile", fmt.Sprintf("include %q", includeName), compileErr)
@@ -76,6 +71,43 @@ func (compiler *Compiler) CompileAssets(
 	}
 
 	return output, nil
+}
+
+func (compiler *Compiler) compileProgramInclude(
+	ctx context.Context,
+	assetFS fs.FS,
+	includePath string,
+	cacheDir string,
+) (*ast.Graph, *ir.Graph, error) {
+	repoID, componentName, ok := strings.Cut(strings.TrimPrefix(includePath, "hf://"), "#")
+
+	if strings.HasPrefix(includePath, "hf://") && ok {
+		location := resolve.RepoLocation{
+			RepoID:   repoID,
+			RepoType: resolve.ModelRepo,
+			Revision: "main",
+		}
+
+		component := ast.Component{
+			ClassName: componentName,
+			Subfolder: componentName,
+		}
+
+		componentGraph, computeGraph, err := compiler.compileComponent(
+			ctx,
+			location,
+			cacheDir,
+			component,
+		)
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return componentGraph.Graph, computeGraph, nil
+	}
+
+	return compiler.compileModelInclude(ctx, assetFS, includePath, cacheDir)
 }
 
 func (compiler *Compiler) compileModelInclude(
@@ -137,7 +169,7 @@ func (compiler *Compiler) compileModelInclude(
 	}
 
 	topology, err = compiler.expander.ExpandTopology(topology)
-	
+
 	if err != nil {
 		return nil, nil, err
 	}
@@ -163,10 +195,15 @@ func (compiler *Compiler) compileModelInclude(
 			location.Revision = block.System.Runtime.Model.Revision
 		}
 
-		filename, weightErr := compiler.resolver.PrimaryWeightFile(ctx, location, "", cacheDir)
+		filenames, weightErr := compiler.resolver.WeightFiles(
+			ctx,
+			location,
+			block.WeightSubfolder(),
+			cacheDir,
+		)
 
 		if weightErr == nil {
-			weightPath, bindErr := compiler.bindWeightsFile(ctx, location, cacheDir, filename, graph, nil)
+			weightPath, bindErr := compiler.bindWeightsFiles(ctx, location, cacheDir, filenames, graph, nil)
 
 			if bindErr != nil {
 				return nil, nil, bindErr
@@ -309,6 +346,31 @@ func (compiler *Compiler) compileTopologyModule(
 	return graph, computeGraph, nil
 }
 
+func (compiler *Compiler) bindWeightsFiles(
+	ctx context.Context,
+	location resolve.RepoLocation,
+	cacheDir string,
+	filenames []string,
+	graph *ast.Graph,
+	weightMap map[string]string,
+) (string, error) {
+	firstWeightPath := ""
+
+	for _, filename := range filenames {
+		weightPath, err := compiler.bindWeightsFile(ctx, location, cacheDir, filename, graph, weightMap)
+
+		if err != nil {
+			return "", err
+		}
+
+		if firstWeightPath == "" {
+			firstWeightPath = weightPath
+		}
+	}
+
+	return firstWeightPath, nil
+}
+
 func (compiler *Compiler) bindWeightsFile(
 	ctx context.Context,
 	location resolve.RepoLocation,
@@ -335,7 +397,41 @@ func (compiler *Compiler) bindWeightsFile(
 		return "", err
 	}
 
+	compiler.markWeightFile(graph, weightNames(index), file.Path)
+
 	return file.Path, nil
+}
+
+func (compiler *Compiler) markWeightFile(
+	graph *ast.Graph,
+	weightNames map[string]struct{},
+	weightPath string,
+) {
+	for _, node := range graph.Nodes {
+		if node.Weights == nil {
+			continue
+		}
+
+		if _, ok := weightNames[node.Weights.TensorName]; !ok {
+			continue
+		}
+
+		if node.Metadata == nil {
+			node.Metadata = make(map[string]any)
+		}
+
+		node.Metadata["weight_file"] = weightPath
+	}
+}
+
+func weightNames[T any](index map[string]T) map[string]struct{} {
+	names := make(map[string]struct{}, len(index))
+
+	for name := range index {
+		names[name] = struct{}{}
+	}
+
+	return names
 }
 
 // NormalizeIncludePath maps template-relative paths for asset FS reads.

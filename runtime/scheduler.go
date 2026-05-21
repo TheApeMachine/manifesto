@@ -68,7 +68,14 @@ func (scheduler *FlowMatchEulerDiscrete) Step(
 		return nil, fmt.Errorf("scheduler step: latents/velocity length mismatch")
 	}
 
-	delta := timestep / float32(scheduler.NumTrainTimesteps)
+	stepSize := float32(scheduler.NumTrainTimesteps) / float32(scheduler.Steps)
+	nextTimestep := timestep - stepSize
+
+	if nextTimestep < 0 {
+		nextTimestep = 0
+	}
+
+	delta := (timestep - nextTimestep) / float32(scheduler.NumTrainTimesteps)
 	updated := make([]float32, len(latents))
 
 	for index := range latents {

@@ -70,6 +70,10 @@ func (lowerer *Lowerer) Topology(
 			}
 		}
 
+		if graphNode.Weights == nil {
+			graphNode.Weights = boundWeightFromSafeTensors(node.Config)
+		}
+
 		for _, outWire := range node.Out {
 			wireToNode[outWire] = node.ID
 		}
@@ -92,6 +96,69 @@ func (lowerer *Lowerer) Topology(
 	}
 
 	return graph, nil
+}
+
+func boundWeightFromSafeTensors(config map[string]any) *ast.BoundWeight {
+	raw := mapFromAny(config["from_safetensors"])
+
+	if raw == nil {
+		return nil
+	}
+
+	weight, ok := raw["weight"].(string)
+
+	if !ok || weight == "" {
+		return nil
+	}
+
+	boundWeight := &ast.BoundWeight{TensorName: weight}
+	axis, _ := raw["slice_axis"].(string)
+
+	if axis != "" {
+		boundWeight.Slice = &ast.WeightSlice{
+			Axis:  axis,
+			Start: int64FromAny(raw["slice_start"]),
+			End:   int64FromAny(raw["slice_end"]),
+		}
+	}
+
+	return boundWeight
+}
+
+func mapFromAny(value any) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed
+	case map[any]any:
+		out := make(map[string]any, len(typed))
+
+		for key, value := range typed {
+			text, ok := key.(string)
+
+			if !ok {
+				continue
+			}
+
+			out[text] = value
+		}
+
+		return out
+	default:
+		return nil
+	}
+}
+
+func int64FromAny(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	default:
+		return 0
+	}
 }
 
 func (lowerer *Lowerer) cloneMap(values map[string]any) map[string]any {

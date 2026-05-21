@@ -74,7 +74,7 @@ func (catalog *FS) LoadRecipe(name string) (*ast.Recipe, error) {
 	topology, blockErr := catalog.LoadBlock(name)
 
 	if blockErr != nil {
-		return nil, fmt.Errorf("catalog recipe %q: %w", name, err)
+		return nil, fmt.Errorf("catalog recipe %q: %w", name, blockErr)
 	}
 
 	return &ast.Recipe{
@@ -91,18 +91,40 @@ func (catalog *FS) LoadBlock(name string) (*ast.Topology, error) {
 	}
 
 	topology := &ast.Topology{}
+	topologyErr := yaml.Unmarshal(raw, topology)
 
-	if err := yaml.Unmarshal(raw, topology); err != nil {
-		return nil, fmt.Errorf("catalog block parse %q: %w", name, err)
+	if topologyErr == nil && (len(topology.Inputs) > 0 || len(topology.Nodes) > 0) {
+		return topology, nil
+	}
+
+	document := &blockDocument{}
+
+	if err := yaml.Unmarshal(raw, document); err != nil {
+		return nil, fmt.Errorf("catalog block document parse %q: %w", name, err)
+	}
+
+	if document.System.Topology != nil {
+		return document.System.Topology, nil
+	}
+
+	if topologyErr != nil {
+		return nil, fmt.Errorf("catalog block parse %q: %w", name, topologyErr)
 	}
 
 	return topology, nil
+}
+
+type blockDocument struct {
+	System struct {
+		Topology *ast.Topology `yaml:"topology"`
+	} `yaml:"system"`
 }
 
 func (catalog *FS) readBlockBytes(name string) ([]byte, error) {
 	candidates := []string{
 		blockPath(name),
 		architecturePath(name),
+		modelTemplatePath(name),
 	}
 
 	var lastErr error
@@ -146,6 +168,16 @@ func architecturePath(name string) string {
 	suffix := strings.TrimPrefix(name, "model.architecture.")
 
 	return path.Join("model", "architecture", suffix+".yml")
+}
+
+func modelTemplatePath(name string) string {
+	if !strings.HasPrefix(name, "model.") {
+		return ""
+	}
+
+	suffix := strings.TrimPrefix(name, "model.")
+
+	return path.Join("model", normalizeName(suffix)+".yml")
 }
 
 func normalizeName(name string) string {

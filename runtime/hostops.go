@@ -17,16 +17,19 @@ type HostOps interface {
 EncodeRequest identifies a tokenizer for one encode step.
 */
 type EncodeRequest struct {
-	Tokenizer string
-	Text      string
+	Tokenizer         string
+	TokenizerFile     string
+	Text              string
+	ApplyChatTemplate bool
 }
 
 /*
 EmitTokenRequest identifies a tokenizer for one emit step.
 */
 type EmitTokenRequest struct {
-	Tokenizer string
-	TokenID   int
+	Tokenizer     string
+	TokenizerFile string
+	TokenID       int
 }
 
 /*
@@ -38,4 +41,6 @@ type WriteImageRequest struct {
 	Width    int
 	Height   int
 	Channels int
+	Layout   string
+	Range    string
 }

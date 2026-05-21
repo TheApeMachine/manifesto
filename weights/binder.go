@@ -92,6 +92,10 @@ func (binder *Binder) Bind(
 		meta, ok := index[tensorName]
 
 		if !ok {
+			if node.Weights != nil && len(node.Weights.Shape) > 0 {
+				continue
+			}
+
 			if node.Weights != nil && node.Weights.TensorName != "" {
 				return fmt.Errorf("weights bind: missing tensor %q for node %q", tensorName, node.ID)
 			}
@@ -105,10 +109,17 @@ func (binder *Binder) Bind(
 			return fmt.Errorf("weights bind: parse dtype for tensor %q: %w", tensorName, err)
 		}
 
+		var weightSlice *ast.WeightSlice
+
+		if node.Weights != nil {
+			weightSlice = node.Weights.Slice
+		}
+
 		node.Weights = &ast.BoundWeight{
 			TensorName: tensorName,
 			Shape:      append([]int64(nil), meta.Shape...),
 			DType:      parsedDType,
+			Slice:      weightSlice,
 		}
 	}
 

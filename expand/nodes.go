@@ -50,6 +50,7 @@ func (expander *Recipe) expandNode(node ast.Node, variables map[string]any) ([]a
 			}
 
 			loopVars["offset_"+node.Index] = layerIndex + offset
+			loopVars["next_offset_"+node.Index] = layerIndex + offset + 1
 		}
 
 		for _, templateNode := range node.Template {
@@ -76,6 +77,7 @@ func (expander *Recipe) repeatCount(repeat any, variables map[string]any) (int, 
 		}
 
 		key := strings.TrimSuffix(strings.TrimPrefix(text, "${"), "}")
+		key = strings.TrimPrefix(key, "include.")
 		resolved, found := variables[key]
 
 		if !found {

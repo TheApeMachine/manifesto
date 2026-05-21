@@ -126,9 +126,11 @@ func (inferencer *ShapeInferencer) inferNode(
 	case "projection.linear":
 		return inferencer.inferLinear(topologyNode.Config, inputShapes)
 	case "math.rmsnorm", "math.layernorm", "math.add",
-		"activation.gelu", "activation.silu", "activation.swiglu",
+		"activation.gelu", "activation.silu",
 		"positional.rope", "state.tensor", "state.write":
 		return inferencer.inferIdentity(inputShapes)
+	case "activation.swiglu":
+		return inferencer.inferSwiGLU(inputShapes)
 	case "shape.view_as_heads":
 		return inferencer.inferViewAsHeads(topologyNode.Config, inputShapes)
 	case "shape.merge_heads":
@@ -313,6 +315,26 @@ func (inferencer *ShapeInferencer) inferIdentity(inputShapes [][]int64) ([][]int
 	}
 
 	return [][]int64{cloneShape(inputShapes[0])}, nil
+}
+
+func (inferencer *ShapeInferencer) inferSwiGLU(inputShapes [][]int64) ([][]int64, error) {
+	if len(inputShapes) != 1 {
+		return inferencer.inferIdentity(inputShapes)
+	}
+
+	output := cloneShape(inputShapes[0])
+
+	if len(output) == 0 {
+		return [][]int64{output}, nil
+	}
+
+	lastIndex := len(output) - 1
+
+	if output[lastIndex] > 0 {
+		output[lastIndex] /= 2
+	}
+
+	return [][]int64{output}, nil
 }
 
 func (inferencer *ShapeInferencer) configInt64(config map[string]any, keys ...string) (int64, error) {

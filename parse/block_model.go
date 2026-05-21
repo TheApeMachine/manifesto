@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 
@@ -79,6 +80,24 @@ func (block *BlockModel) PrimaryRepoID() string {
 	}
 
 	return ""
+}
+
+/*
+WeightSubfolder returns the component directory declared by the model weight
+file, if the manifest points at a repository subfolder.
+*/
+func (block *BlockModel) WeightSubfolder() string {
+	if block == nil {
+		return ""
+	}
+
+	directory := filepath.Dir(block.System.Runtime.Model.File)
+
+	if directory == "." {
+		return ""
+	}
+
+	return directory
 }
 
 /*

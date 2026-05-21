@@ -10,13 +10,17 @@ import (
 ProgramDocument is the raw YAML shape for a runtime program manifest.
 */
 type ProgramDocument struct {
-	Kind      string            `yaml:"kind"`
-	Name      string            `yaml:"name"`
-	Includes  map[string]string `yaml:"includes"`
-	Include   map[string]string `yaml:"include"`
-	Variables map[string]any    `yaml:"variables"`
-	Main      []rawStep         `yaml:"main"`
-	System    programSystem     `yaml:"system"`
+	Kind       string                              `yaml:"kind"`
+	Name       string                              `yaml:"name"`
+	Category   string                              `yaml:"category"`
+	Includes   map[string]string                   `yaml:"includes"`
+	Include    map[string]string                   `yaml:"include"`
+	Variables  map[string]any                      `yaml:"variables"`
+	State      []ast.StateDeclaration              `yaml:"state"`
+	Schedulers map[string]ast.SchedulerDeclaration `yaml:"schedulers"`
+	Graphs     map[string]ast.GraphModule          `yaml:"graphs"`
+	Main       []rawStep                           `yaml:"main"`
+	System     programSystem                       `yaml:"system"`
 }
 
 type programSystem struct {

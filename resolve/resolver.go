@@ -138,6 +138,24 @@ func (resolver *Resolver) PrimaryWeightFile(
 	subfolder string,
 	cacheDir string,
 ) (string, error) {
+	files, err := resolver.WeightFiles(ctx, location, subfolder, cacheDir)
+
+	if err != nil {
+		return "", err
+	}
+
+	return files[0], nil
+}
+
+/*
+WeightFiles returns every safetensors filename found for a component.
+*/
+func (resolver *Resolver) WeightFiles(
+	ctx context.Context,
+	location RepoLocation,
+	subfolder string,
+	cacheDir string,
+) ([]string, error) {
 	candidates := []string{
 		subfolder + "/model.safetensors",
 		subfolder + "/diffusion_pytorch_model.safetensors",
@@ -152,20 +170,20 @@ func (resolver *Resolver) PrimaryWeightFile(
 
 		reader.Close()
 
-		return filename, nil
+		return []string{filename}, nil
 	}
 
 	matches, err := resolver.hub.Glob(ctx, location, subfolder+"/*.safetensors", cacheDir)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(matches) == 0 {
-		return "", fmt.Errorf("resolve weights: no safetensors in %q", subfolder)
+		return nil, fmt.Errorf("resolve weights: no safetensors in %q", subfolder)
 	}
 
-	return matches[0], nil
+	return matches, nil
 }
 
 func (resolver *Resolver) ClassName(config map[string]any, fallback string) string {

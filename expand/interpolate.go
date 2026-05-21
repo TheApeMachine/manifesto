@@ -57,16 +57,33 @@ func (expander *Recipe) interpolateMap(values map[string]any, variables map[stri
 	out := make(map[string]any, len(values))
 
 	for key, value := range values {
-		text, ok := value.(string)
-
-		if !ok {
-			out[key] = value
-
-			continue
-		}
-
-		out[key] = expander.interpolateString(text, variables)
+		out[key] = expander.interpolateValue(value, variables)
 	}
 
 	return out
+}
+
+func (expander *Recipe) interpolateValue(value any, variables map[string]any) any {
+	switch typed := value.(type) {
+	case string:
+		return expander.interpolateTextValue(typed, variables)
+	case map[string]any:
+		return expander.interpolateMap(typed, variables)
+	default:
+		return value
+	}
+}
+
+func (expander *Recipe) interpolateTextValue(value string, variables map[string]any) any {
+	for key, variable := range variables {
+		if value == fmt.Sprintf("${%s}", key) {
+			return variable
+		}
+
+		if value == fmt.Sprintf("${include.%s}", key) {
+			return variable
+		}
+	}
+
+	return expander.interpolateString(value, variables)
 }

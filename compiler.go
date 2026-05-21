@@ -217,29 +217,23 @@ func (compiler *Compiler) bindComponentWeights(
 	graph *ast.Graph,
 	weightMap map[string]string,
 ) error {
-	filename, err := compiler.resolver.PrimaryWeightFile(ctx, location, component.Subfolder, cacheDir)
+	filenames, err := compiler.resolver.WeightFiles(ctx, location, component.Subfolder, cacheDir)
 
 	if err != nil {
 		return newError(location.RepoID, "weights", "locate safetensors", err)
 	}
 
-	reader, _, err := compiler.resolver.Open(ctx, location, filename, cacheDir)
+	weightPath, err := compiler.bindWeightsFiles(ctx, location, cacheDir, filenames, graph, weightMap)
 
 	if err != nil {
-		return newError(location.RepoID, "weights", "open safetensors", err)
+		return err
 	}
 
-	defer reader.Close()
-
-	index, err := compiler.binder.Index(reader)
-
-	if err != nil {
-		return newError(location.RepoID, "weights", "index safetensors", err)
+	if graph.Metadata == nil {
+		graph.Metadata = make(map[string]any)
 	}
 
-	if err := compiler.binder.Bind(graph, index, weightMap); err != nil {
-		return newError(location.RepoID, "weights", "bind weights", err)
-	}
+	graph.Metadata["weights_path"] = weightPath
 
 	return nil
 }

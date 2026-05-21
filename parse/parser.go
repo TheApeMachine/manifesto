@@ -44,6 +44,21 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		rawSteps = document.System.Runtime.Program
 	}
 
+	state := document.State
+	if len(state) == 0 {
+		state = document.System.Runtime.State
+	}
+
+	schedulers := document.Schedulers
+	if len(schedulers) == 0 {
+		schedulers = document.System.Runtime.Schedulers
+	}
+
+	graphs := document.Graphs
+	if len(graphs) == 0 {
+		graphs = document.System.Runtime.Graphs
+	}
+
 	steps, err := parser.normalizeSteps(rawSteps)
 
 	if err != nil {
@@ -54,9 +69,9 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		Name:       document.Name,
 		Includes:   includes,
 		Variables:  document.Variables,
-		State:      document.System.Runtime.State,
-		Schedulers: document.System.Runtime.Schedulers,
-		Graphs:     document.System.Runtime.Graphs,
+		State:      state,
+		Schedulers: schedulers,
+		Graphs:     graphs,
 		Steps:      steps,
 	}, nil
 }

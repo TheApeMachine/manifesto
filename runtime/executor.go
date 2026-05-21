@@ -157,6 +157,8 @@ func (executor *Executor) runStepWithBody(
 	values map[string]any,
 ) error {
 	switch step.Op {
+	case "control.loop_each":
+		return executor.runLoopEach(ctx, step, graphs, compute, values)
 	case "control.loop_count", "":
 		if step.Loop != nil && step.Loop.Repeat != "" {
 			return executor.runLoopCount(ctx, step, graphs, compute, values)
@@ -238,14 +240,18 @@ func (executor *Executor) runEncode(
 	}
 
 	tokenizerName, _ := step.Config["tokenizer"].(string)
+	tokenizerFile, _ := step.Config["tokenizer_file"].(string)
+	applyChatTemplate, _ := step.Config["apply_chat_template"].(bool)
 
 	var tokenIDs []int
 	var err error
 
 	if executor.host != nil {
 		tokenIDs, err = executor.host.Encode(ctx, EncodeRequest{
-			Tokenizer: tokenizerName,
-			Text:      text,
+			Tokenizer:         tokenizerName,
+			TokenizerFile:     tokenizerFile,
+			Text:              text,
+			ApplyChatTemplate: applyChatTemplate,
 		})
 	} else {
 		return fmt.Errorf("tokenizer.encode: host ops are required")
@@ -279,9 +285,11 @@ func (executor *Executor) runEmitToken(
 		}
 
 		tokenizerName, _ := step.Config["tokenizer"].(string)
+		tokenizerFile, _ := step.Config["tokenizer_file"].(string)
 		if err := executor.host.EmitToken(ctx, EmitTokenRequest{
-			Tokenizer: tokenizerName,
-			TokenID:   tokenID,
+			Tokenizer:     tokenizerName,
+			TokenizerFile: tokenizerFile,
+			TokenID:       tokenID,
 		}); err != nil {
 			return err
 		}
@@ -306,10 +314,17 @@ func (executor *Executor) runWriteImage(
 	}
 
 	path, _ := step.Config["path"].(string)
+	layout, _ := step.Config["layout"].(string)
+	valueRange, _ := step.Config["range"].(string)
 
 	return executor.host.WriteImage(ctx, WriteImageRequest{
-		Path:   path,
-		Tensor: values[imageRef],
+		Path:     path,
+		Tensor:   values[imageRef],
+		Width:    intFromConfig(step.Config, "width", 0),
+		Height:   intFromConfig(step.Config, "height", 0),
+		Channels: intFromConfig(step.Config, "channels", 0),
+		Layout:   layout,
+		Range:    valueRange,
 	})
 }
 
