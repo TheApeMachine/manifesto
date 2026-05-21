@@ -242,6 +242,8 @@ func (executor *Executor) runEncode(
 	tokenizerName, _ := step.Config["tokenizer"].(string)
 	tokenizerFile, _ := step.Config["tokenizer_file"].(string)
 	applyChatTemplate, _ := step.Config["apply_chat_template"].(bool)
+	maxLength := intFromConfig(step.Config, "max_length", 0)
+	padTokenID := intFromConfig(step.Config, "pad_token_id", 0)
 
 	var tokenIDs []int
 	var err error
@@ -252,6 +254,8 @@ func (executor *Executor) runEncode(
 			TokenizerFile:     tokenizerFile,
 			Text:              text,
 			ApplyChatTemplate: applyChatTemplate,
+			MaxLength:         maxLength,
+			PadTokenID:        padTokenID,
 		})
 	} else {
 		return fmt.Errorf("tokenizer.encode: host ops are required")

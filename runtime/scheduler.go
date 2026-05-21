@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"math"
 )
 
 /*
@@ -10,6 +11,12 @@ FlowMatchEulerDiscrete implements the FLUX-style flow-match Euler scheduler.
 type FlowMatchEulerDiscrete struct {
 	Steps             int
 	NumTrainTimesteps int
+	Shift             float64
+	UseDynamicShift   bool
+	TimeShiftType     string
+	ImageSeqLen       int
+	sigmas            []float32
+	timesteps         []float32
 }
 
 /*
@@ -28,9 +35,31 @@ func NewFlowMatchEulerDiscrete(declaration SchedulerConfig) (*FlowMatchEulerDisc
 		trainSteps = 1000
 	}
 
+	shift := declaration.Shift
+
+	if shift == 0 {
+		shift = 1
+	}
+
+	timeShiftType := declaration.TimeShiftType
+
+	if timeShiftType == "" {
+		timeShiftType = "exponential"
+	}
+
+	imageSeqLen := declaration.ImageSeqLen
+
+	if imageSeqLen <= 0 {
+		imageSeqLen = 4096
+	}
+
 	return &FlowMatchEulerDiscrete{
 		Steps:             steps,
 		NumTrainTimesteps: trainSteps,
+		Shift:             shift,
+		UseDynamicShift:   declaration.UseDynamicShift,
+		TimeShiftType:     timeShiftType,
+		ImageSeqLen:       imageSeqLen,
 	}, nil
 }
 
@@ -40,20 +69,76 @@ SchedulerConfig is the host-neutral scheduler configuration.
 type SchedulerConfig struct {
 	Steps             int
 	NumTrainTimesteps int
+	Shift             float64
+	UseDynamicShift   bool
+	TimeShiftType     string
+	ImageSeqLen       int
 }
 
 /*
 Timesteps returns the inference timestep schedule.
 */
 func (scheduler *FlowMatchEulerDiscrete) Timesteps() []float32 {
-	timesteps := make([]float32, scheduler.Steps)
-	stepSize := float32(scheduler.NumTrainTimesteps) / float32(scheduler.Steps)
-
-	for index := range timesteps {
-		timesteps[index] = float32(scheduler.NumTrainTimesteps) - float32(index)*stepSize
+	if len(scheduler.timesteps) == scheduler.Steps {
+		return append([]float32(nil), scheduler.timesteps...)
 	}
 
-	return timesteps
+	sigmas := scheduler.inferenceSigmas()
+	timesteps := make([]float32, scheduler.Steps)
+
+	for index, sigma := range sigmas[:scheduler.Steps] {
+		timesteps[index] = sigma * float32(scheduler.NumTrainTimesteps)
+	}
+
+	scheduler.sigmas = sigmas
+	scheduler.timesteps = timesteps
+
+	return append([]float32(nil), timesteps...)
+}
+
+func (scheduler *FlowMatchEulerDiscrete) inferenceSigmas() []float32 {
+	sigmas := make([]float32, scheduler.Steps+1)
+
+	for index := range scheduler.Steps {
+		sigma := 1.0 - (1.0-float64(1)/float64(scheduler.Steps))*float64(index)/float64(scheduler.Steps-1)
+
+		if scheduler.UseDynamicShift {
+			mu := scheduler.empiricalMu()
+			sigma = scheduler.timeShift(mu, sigma)
+		} else {
+			sigma = scheduler.Shift * sigma / (1 + (scheduler.Shift-1)*sigma)
+		}
+
+		sigmas[index] = float32(sigma)
+	}
+
+	return sigmas
+}
+
+func (scheduler *FlowMatchEulerDiscrete) empiricalMu() float64 {
+	a1, b1 := 8.73809524e-05, 1.89833333
+	a2, b2 := 0.00016927, 0.45666666
+	imageSeqLen := float64(scheduler.ImageSeqLen)
+
+	if scheduler.ImageSeqLen > 4300 {
+		return a2*imageSeqLen + b2
+	}
+
+	m200 := a2*imageSeqLen + b2
+	m10 := a1*imageSeqLen + b1
+	slope := (m200 - m10) / 190
+	intercept := m200 - 200*slope
+
+	return slope*float64(scheduler.Steps) + intercept
+}
+
+func (scheduler *FlowMatchEulerDiscrete) timeShift(mu float64, sigma float64) float64 {
+	if scheduler.TimeShiftType == "linear" {
+		return mu / (mu + (1/sigma - 1))
+	}
+
+	expMu := math.Exp(mu)
+	return expMu / (expMu + (1/sigma - 1))
 }
 
 /*
@@ -68,19 +153,30 @@ func (scheduler *FlowMatchEulerDiscrete) Step(
 		return nil, fmt.Errorf("scheduler step: latents/velocity length mismatch")
 	}
 
-	stepSize := float32(scheduler.NumTrainTimesteps) / float32(scheduler.Steps)
-	nextTimestep := timestep - stepSize
-
-	if nextTimestep < 0 {
-		nextTimestep = 0
+	if len(scheduler.sigmas) != scheduler.Steps+1 {
+		scheduler.Timesteps()
 	}
 
-	delta := (timestep - nextTimestep) / float32(scheduler.NumTrainTimesteps)
+	sigmaIndex := scheduler.sigmaIndex(timestep)
+	delta := scheduler.sigmas[sigmaIndex+1] - scheduler.sigmas[sigmaIndex]
+
 	updated := make([]float32, len(latents))
 
 	for index := range latents {
-		updated[index] = latents[index] - delta*velocity[index]
+		updated[index] = latents[index] + delta*velocity[index]
 	}
 
 	return updated, nil
+}
+
+func (scheduler *FlowMatchEulerDiscrete) sigmaIndex(timestep float32) int {
+	timesteps := scheduler.Timesteps()
+
+	for index, candidate := range timesteps {
+		if candidate == timestep {
+			return index
+		}
+	}
+
+	return 0
 }

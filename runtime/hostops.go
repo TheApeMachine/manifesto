@@ -21,6 +21,8 @@ type EncodeRequest struct {
 	TokenizerFile     string
 	Text              string
 	ApplyChatTemplate bool
+	MaxLength         int
+	PadTokenID        int
 }
 
 /*

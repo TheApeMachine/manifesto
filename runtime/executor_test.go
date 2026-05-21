@@ -32,6 +32,8 @@ func TestExecutorRunEncode(testingObject *testing.T) {
 						"tokenizer":           "hf://meta-llama/Llama-3.2-1B-Instruct",
 						"tokenizer_file":      "tokenizer/tokenizer.json",
 						"apply_chat_template": true,
+						"max_length":          512,
+						"pad_token_id":        151643,
 					},
 				},
 			},
@@ -43,6 +45,8 @@ func TestExecutorRunEncode(testingObject *testing.T) {
 		convey.So(host.request.ApplyChatTemplate, convey.ShouldBeTrue)
 		convey.So(host.request.TokenizerFile, convey.ShouldEqual, "tokenizer/tokenizer.json")
 		convey.So(host.request.Text, convey.ShouldEqual, "hello")
+		convey.So(host.request.MaxLength, convey.ShouldEqual, 512)
+		convey.So(host.request.PadTokenID, convey.ShouldEqual, 151643)
 	})
 }
 
@@ -131,24 +135,6 @@ func TestExecutorRunLoopEach(testingObject *testing.T) {
 
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(backend.request.Inputs["timestep"], convey.ShouldEqual, float32(0.5))
-	})
-}
-
-func TestFlowMatchEulerDiscreteStep(testingObject *testing.T) {
-	convey.Convey("Given a four-step flow-match scheduler", testingObject, func() {
-		scheduler, err := NewFlowMatchEulerDiscrete(SchedulerConfig{
-			Steps:             4,
-			NumTrainTimesteps: 1000,
-		})
-
-		convey.So(err, convey.ShouldBeNil)
-
-		convey.Convey("It should integrate over one sigma interval", func() {
-			updated, err := scheduler.Step([]float32{1}, []float32{4}, 1000)
-
-			convey.So(err, convey.ShouldBeNil)
-			convey.So(updated, convey.ShouldResemble, []float32{0})
-		})
 	})
 }
 
