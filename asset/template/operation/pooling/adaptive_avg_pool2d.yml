@@ -1,0 +1,22 @@
+kind: Operation
+category: pooling
+op: pooling.adaptive_avg_pool2d
+name: Adaptive Avg Pool 2D
+label: Adaptive Avg Pool 2D
+description: Average pool to any output spatial size.
+initial_width: 240
+inputs:
+  - name: x
+    type: tensor
+    description: Input [N, C, H, W]
+outputs:
+  - name: y
+    type: tensor
+    description: Pooled output [N, C, out_h, out_w]
+config:
+  - name: out_h
+    type: int
+    description: Target output height
+  - name: out_w
+    type: int
+    description: Target output width

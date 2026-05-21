@@ -1,0 +1,37 @@
+kind: Block
+category: energy
+op: block.energy.free_energy
+name: Energy Free Energy
+label: EBM Free Energy
+description: Computes F = -beta^{-1} logsumexp(-beta E) over the last dimension.
+initial_width: 260
+inputs:
+  - name: energy
+    type: tensor
+    description: Energy values E(x)
+  - name: negative_beta
+    type: tensor
+    description: Elementwise -beta scale matching energy shape
+  - name: negative_inverse_beta
+    type: tensor
+    description: Elementwise -1 / beta scale matching log-partition shape
+outputs:
+  - name: free_energy
+    type: tensor
+    description: Free energy over the last energy dimension
+
+system:
+  topology:
+    nodes:
+      - id: free_energy_scale
+        op: math.mul
+        in: [energy, negative_beta]
+        out: [negative_beta_energy]
+      - id: free_energy_log_partition
+        op: math.logsumexp
+        in: [negative_beta_energy]
+        out: [log_partition]
+      - id: free_energy_temperature
+        op: math.mul
+        in: [log_partition, negative_inverse_beta]
+        out: [free_energy]

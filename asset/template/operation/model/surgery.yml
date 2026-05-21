@@ -1,0 +1,36 @@
+kind: Operation
+category: model
+op: model.surgery
+name: ModelSurgery
+label: Layer Surgery
+description: Inserts, replaces, or removes layers in a loaded model by dot-path name or numeric index. Wire after model.load using the same source key.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "Source key — must match the model.load node's source"
+    required: true
+  - name: op
+    type: string
+    description: "insert | replace | remove"
+    required: true
+  - name: at
+    type: string
+    description: "Exact dot-path (e.g. transformer.h.4.attn) or numeric index"
+  - name: after
+    type: string
+    description: "Insert after this dot-path or index (insert op only)"
+  - name: name
+    type: string
+    description: "Name to assign the inserted/replaced layer"
+  - name: layer
+    type: tensor
+    description: "Weight values for the new layer (insert/replace ops)"
+inputs:
+  - name: trigger
+    type: scalar
+    description: Trigger from model.load or a prior surgery node
+outputs:
+  - name: trigger
+    type: scalar
+    description: Passthrough trigger for chaining further surgery nodes

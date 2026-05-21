@@ -1,0 +1,39 @@
+kind: Block
+category: hawkes
+op: block.hawkes.process
+name: Hawkes Process
+label: Hawkes Process
+description: Computes intensity and log likelihood of a Hawkes process.
+initial_width: 260
+inputs:
+  - name: times
+    type: tensor
+    description: Input tensor
+  - name: alpha
+    type: tensor
+    description: Input tensor
+  - name: beta
+    type: tensor
+    description: Input tensor
+  - name: mu
+    type: tensor
+    description: Input tensor
+  - name: integral
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: log_lik
+    type: tensor
+    description: Output tensor
+
+system:
+  topology:
+    nodes:
+      - id: calc_intensity
+        op: hawkes.intensity
+        in: [times, alpha, beta, mu]
+        out: [intensities]
+      - id: calc_ll
+        op: hawkes.log_likelihood
+        in: [intensities, integral]
+        out: [log_lik]

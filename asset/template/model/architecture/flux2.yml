@@ -1,0 +1,585 @@
+# FLUX-2 transformer denoiser topology, parameterised on the model's
+# config so any FLUX-2-shaped checkpoint can drop into this file by
+# including it with the right dimensions. The node IDs match the
+# safetensors tensor prefixes one-to-one — that's what lets the weight
+# binder map values to nodes without any architecture-specific Go.
+#
+# This file is data, not code. Adding a new architecture means writing
+# another sibling YAML, not modifying any Go source. The include caller
+# supplies these variables:
+#
+#   in_channels             latent channels (e.g. 128)
+#   hidden_size             model dim (e.g. 3072)
+#   double_hidden_size      2*hidden_size
+#   triple_hidden_size      3*hidden_size
+#   joint_attention_dim     text encoder hidden dim (e.g. 7680)
+#   num_layers              dual-stream block count (e.g. 5)
+#   num_single_layers       single-stream block count (e.g. 20)
+#   num_attention_heads     attention head count (e.g. 24)
+#   attention_head_dim      per-head dim (e.g. 128)
+#   mlp_inner               SwiGLU inner dim (3*hidden_size for mlp_ratio=3)
+#   mlp_packed              SwiGLU packed gate+up dim (2*mlp_inner)
+#   rope_theta              RoPE base (e.g. 2000)
+#   eps                     RMSNorm eps (e.g. 1e-06)
+#   latent_seq_len          latent token count after concat trim (e.g. 4096)
+#   latent_side             latent grid side length after packing (e.g. 64)
+#   dual_terminal_index     `${num_layers}` as a literal — used to wire the
+#                           handoff between dual and single stream sections
+#   joint_terminal_index    `${num_layers} + ${num_single_layers}` as a literal
+inputs: [hidden_states, encoder_hidden_states, timestep]
+nodes:
+  - id: time_guidance_embed.time_proj
+    op: embedding.timestep
+    in: [timestep]
+    out: [timestep_projection]
+    config:
+      dim: 256
+      flip_sin_to_cos: true
+      downscale_freq_shift: 0
+      max_period: 10000
+
+  - id: time_guidance_embed.timestep_embedder.linear_1
+    op: projection.linear
+    in: [timestep_projection]
+    out: [timestep_hidden]
+    config:
+      in_features: 256
+      out_features: ${include.hidden_size}
+
+  - id: time_guidance_embed.timestep_embedder.act
+    op: activation.swish
+    in: [timestep_hidden]
+    out: [timestep_activated]
+
+  - id: time_guidance_embed.timestep_embedder.linear_2
+    op: projection.linear
+    in: [timestep_activated]
+    out: [temb]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.hidden_size}
+
+  - id: single_stream_modulation.act
+    op: activation.swish
+    in: [temb]
+    out: [single_modulation_conditioning]
+
+  - id: single_stream_modulation.linear
+    op: projection.linear
+    in: [single_modulation_conditioning]
+    out: [single_modulation]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.triple_hidden_size}
+
+  - id: x_embedder
+    op: projection.linear
+    in: [hidden_states]
+    out: [h_0]
+    config:
+      in_features: ${include.in_channels}
+      out_features: ${include.hidden_size}
+
+  - id: context_embedder
+    op: projection.linear
+    in: [encoder_hidden_states]
+    out: [c_0]
+    config:
+      in_features: ${include.joint_attention_dim}
+      out_features: ${include.hidden_size}
+
+  - id: double_stream_modulation_img.act
+    op: activation.swish
+    in: [temb]
+    out: [double_img_modulation_conditioning]
+
+  - id: double_stream_modulation_img.linear
+    op: projection.linear
+    in: [double_img_modulation_conditioning]
+    out: [double_img_modulation]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.mlp_packed}
+
+  - id: double_stream_modulation_txt.act
+    op: activation.swish
+    in: [temb]
+    out: [double_txt_modulation_conditioning]
+
+  - id: double_stream_modulation_txt.linear
+    op: projection.linear
+    in: [double_txt_modulation_conditioning]
+    out: [double_txt_modulation]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.mlp_packed}
+
+  - repeat: ${include.num_layers}
+    index: i
+    template:
+      - id: "transformer_blocks.${i}.norm1"
+        op: math.modulated_layernorm
+        in: ["h_${i}", double_img_modulation]
+        out: ["tb_norm1_${i}"]
+        config: { eps: "${include.eps}", set: 0 }
+
+      - id: "transformer_blocks.${i}.norm1_context"
+        op: math.modulated_layernorm
+        in: ["c_${i}", double_txt_modulation]
+        out: ["tb_context_norm1_${i}"]
+        config: { eps: "${include.eps}", set: 0 }
+
+      - id: "transformer_blocks.${i}.attn.to_q"
+        op: projection.linear
+        in: ["tb_norm1_${i}"]
+        out: ["tb_q_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "transformer_blocks.${i}.attn.to_k"
+        op: projection.linear
+        in: ["tb_norm1_${i}"]
+        out: ["tb_k_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "transformer_blocks.${i}.attn.to_v"
+        op: projection.linear
+        in: ["tb_norm1_${i}"]
+        out: ["tb_v_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "transformer_blocks.${i}.attn.add_q_proj"
+        op: projection.linear
+        in: ["tb_context_norm1_${i}"]
+        out: ["tb_context_q_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "transformer_blocks.${i}.attn.add_k_proj"
+        op: projection.linear
+        in: ["tb_context_norm1_${i}"]
+        out: ["tb_context_k_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "transformer_blocks.${i}.attn.add_v_proj"
+        op: projection.linear
+        in: ["tb_context_norm1_${i}"]
+        out: ["tb_context_v_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "tb_q_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_q_${i}"]
+        out: ["tb_qh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "transformer_blocks.${i}.attn.norm_q"
+        op: math.rmsnorm
+        in: ["tb_qh_${i}"]
+        out: ["tb_qhn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "tb_k_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_k_${i}"]
+        out: ["tb_kh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "transformer_blocks.${i}.attn.norm_k"
+        op: math.rmsnorm
+        in: ["tb_kh_${i}"]
+        out: ["tb_khn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "tb_v_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_v_${i}"]
+        out: ["tb_vh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "tb_context_q_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_context_q_${i}"]
+        out: ["tb_context_qh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "transformer_blocks.${i}.attn.norm_added_q"
+        op: math.rmsnorm
+        in: ["tb_context_qh_${i}"]
+        out: ["tb_context_qhn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "tb_context_k_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_context_k_${i}"]
+        out: ["tb_context_kh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "transformer_blocks.${i}.attn.norm_added_k"
+        op: math.rmsnorm
+        in: ["tb_context_kh_${i}"]
+        out: ["tb_context_khn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "tb_context_v_heads_${i}"
+        op: shape.view_as_heads
+        in: ["tb_context_v_${i}"]
+        out: ["tb_context_vh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "tb_concat_q_${i}"
+        op: shape.concat
+        in: ["tb_context_qhn_${i}", "tb_qhn_${i}"]
+        out: ["tb_joint_q_${i}"]
+        config: { dim: 1 }
+
+      - id: "tb_concat_k_${i}"
+        op: shape.concat
+        in: ["tb_context_khn_${i}", "tb_khn_${i}"]
+        out: ["tb_joint_k_${i}"]
+        config: { dim: 1 }
+
+      - id: "tb_concat_v_${i}"
+        op: shape.concat
+        in: ["tb_context_vh_${i}", "tb_vh_${i}"]
+        out: ["tb_joint_v_${i}"]
+        config: { dim: 1 }
+
+      - id: "tb_rope_q_${i}"
+        op: positional.flux2_rope
+        in: ["tb_joint_q_${i}"]
+        out: ["tb_qr_${i}"]
+        config:
+          base: ${include.rope_theta}
+          head_dim: ${include.attention_head_dim}
+          latent_seq_len: ${include.latent_seq_len}
+          latent_side: ${include.latent_side}
+          mode: half
+
+      - id: "tb_rope_k_${i}"
+        op: positional.flux2_rope
+        in: ["tb_joint_k_${i}"]
+        out: ["tb_kr_${i}"]
+        config:
+          base: ${include.rope_theta}
+          head_dim: ${include.attention_head_dim}
+          latent_seq_len: ${include.latent_seq_len}
+          latent_side: ${include.latent_side}
+          mode: half
+
+      - id: "transformer_blocks.${i}.attn"
+        op: attention.sdpa
+        in: ["tb_qr_${i}", "tb_kr_${i}", "tb_joint_v_${i}"]
+        out: ["tb_attn_${i}"]
+        config: { num_heads: "${include.num_attention_heads}", head_dim: "${include.attention_head_dim}", causal: false }
+
+      - id: "tb_merge_heads_${i}"
+        op: shape.merge_heads
+        in: ["tb_attn_${i}"]
+        out: ["tb_attn_flat_${i}"]
+
+      - id: "tb_context_attn_slice_${i}"
+        op: shape.slice
+        in: ["tb_attn_flat_${i}"]
+        out: ["tb_context_attn_flat_${i}"]
+        config:
+          dim: 1
+          start: 0
+          end: -${include.latent_seq_len}
+
+      - id: "tb_latent_attn_slice_${i}"
+        op: shape.slice
+        in: ["tb_attn_flat_${i}"]
+        out: ["tb_latent_attn_flat_${i}"]
+        config:
+          dim: 1
+          start: -${include.latent_seq_len}
+          end: 0
+
+      - id: "transformer_blocks.${i}.attn.to_out.0"
+        op: projection.linear
+        in: ["tb_latent_attn_flat_${i}"]
+        out: ["tb_attn_out_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "tb_attn_residual_${i}"
+        op: math.gated_residual
+        in: ["h_${i}", "tb_attn_out_${i}", double_img_modulation]
+        out: ["tb_mid_${i}"]
+        config: { set: 0 }
+
+      - id: "transformer_blocks.${i}.attn.to_add_out"
+        op: projection.linear
+        in: ["tb_context_attn_flat_${i}"]
+        out: ["tb_context_attn_out_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.hidden_size}" }
+
+      - id: "tb_context_attn_residual_${i}"
+        op: math.gated_residual
+        in: ["c_${i}", "tb_context_attn_out_${i}", double_txt_modulation]
+        out: ["tb_context_mid_${i}"]
+        config: { set: 0 }
+
+      - id: "transformer_blocks.${i}.norm2"
+        op: math.modulated_layernorm
+        in: ["tb_mid_${i}", double_img_modulation]
+        out: ["tb_norm2_${i}"]
+        config: { eps: "${include.eps}", set: 1 }
+
+      - id: "transformer_blocks.${i}.norm2_context"
+        op: math.modulated_layernorm
+        in: ["tb_context_mid_${i}", double_txt_modulation]
+        out: ["tb_context_norm2_${i}"]
+        config: { eps: "${include.eps}", set: 1 }
+
+      - id: "transformer_blocks.${i}.ff.linear_in"
+        op: projection.linear
+        in: ["tb_norm2_${i}"]
+        out: ["tb_gate_up_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.mlp_packed}" }
+
+      - id: "tb_swiglu_${i}"
+        op: activation.swiglu
+        in: ["tb_gate_up_${i}"]
+        out: ["tb_mlp_${i}"]
+
+      - id: "transformer_blocks.${i}.ff.linear_out"
+        op: projection.linear
+        in: ["tb_mlp_${i}"]
+        out: ["tb_mlp_out_${i}"]
+        config: { in_features: "${include.mlp_inner}", out_features: "${include.hidden_size}" }
+
+      - id: "tb_mlp_residual_${i}"
+        op: math.gated_residual
+        in: ["tb_mid_${i}", "tb_mlp_out_${i}", double_img_modulation]
+        out: ["h_${next_i}"]
+        config: { set: 1 }
+
+      - id: "transformer_blocks.${i}.ff_context.linear_in"
+        op: projection.linear
+        in: ["tb_context_norm2_${i}"]
+        out: ["tb_context_gate_up_${i}"]
+        config: { in_features: "${include.hidden_size}", out_features: "${include.mlp_packed}" }
+
+      - id: "tb_context_swiglu_${i}"
+        op: activation.swiglu
+        in: ["tb_context_gate_up_${i}"]
+        out: ["tb_context_mlp_${i}"]
+
+      - id: "transformer_blocks.${i}.ff_context.linear_out"
+        op: projection.linear
+        in: ["tb_context_mlp_${i}"]
+        out: ["tb_context_mlp_out_${i}"]
+        config: { in_features: "${include.mlp_inner}", out_features: "${include.hidden_size}" }
+
+      - id: "tb_context_mlp_residual_${i}"
+        op: math.gated_residual
+        in: ["tb_context_mid_${i}", "tb_context_mlp_out_${i}", double_txt_modulation]
+        out: ["c_${next_i}"]
+        config: { set: 1 }
+
+  - id: single_stream_concat
+    op: shape.concat
+    in: ["c_${include.num_layers}", "h_${include.num_layers}"]
+    out: ["h_${include.num_layers}"]
+    config:
+      dim: 1
+
+  - repeat: ${include.num_single_layers}
+    index: i
+    offset: ${include.num_layers}
+    template:
+      - id: "single_transformer_blocks.${i}.norm"
+        op: math.modulated_layernorm
+        in: ["h_${offset_i}", single_modulation]
+        out: ["st_norm_${i}"]
+        config: { eps: "${include.eps}", set: 0 }
+
+      - id: "single_transformer_blocks.${i}.attn.to_q"
+        op: projection.linear
+        in: ["st_norm_${i}"]
+        out: ["st_q_${i}"]
+        config:
+          in_features: "${include.hidden_size}"
+          out_features: "${include.hidden_size}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_qkv_mlp_proj.weight"
+            slice_axis: output
+            slice_start: 0
+
+      - id: "single_transformer_blocks.${i}.attn.to_k"
+        op: projection.linear
+        in: ["st_norm_${i}"]
+        out: ["st_k_${i}"]
+        config:
+          in_features: "${include.hidden_size}"
+          out_features: "${include.hidden_size}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_qkv_mlp_proj.weight"
+            slice_axis: output
+            slice_start: "${include.hidden_size}"
+
+      - id: "single_transformer_blocks.${i}.attn.to_v"
+        op: projection.linear
+        in: ["st_norm_${i}"]
+        out: ["st_v_${i}"]
+        config:
+          in_features: "${include.hidden_size}"
+          out_features: "${include.hidden_size}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_qkv_mlp_proj.weight"
+            slice_axis: output
+            slice_start: "${include.double_hidden_size}"
+
+      - id: "st_q_heads_${i}"
+        op: shape.view_as_heads
+        in: ["st_q_${i}"]
+        out: ["st_qh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "single_transformer_blocks.${i}.attn.norm_q"
+        op: math.rmsnorm
+        in: ["st_qh_${i}"]
+        out: ["st_qhn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "st_k_heads_${i}"
+        op: shape.view_as_heads
+        in: ["st_k_${i}"]
+        out: ["st_kh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "single_transformer_blocks.${i}.attn.norm_k"
+        op: math.rmsnorm
+        in: ["st_kh_${i}"]
+        out: ["st_khn_${i}"]
+        config: { eps: "${include.eps}" }
+
+      - id: "st_v_heads_${i}"
+        op: shape.view_as_heads
+        in: ["st_v_${i}"]
+        out: ["st_vh_${i}"]
+        config: { num_heads: "${include.num_attention_heads}" }
+
+      - id: "st_rope_q_${i}"
+        op: positional.flux2_rope
+        in: ["st_qhn_${i}"]
+        out: ["st_qr_${i}"]
+        config:
+          base: ${include.rope_theta}
+          head_dim: ${include.attention_head_dim}
+          latent_seq_len: ${include.latent_seq_len}
+          latent_side: ${include.latent_side}
+          mode: half
+
+      - id: "st_rope_k_${i}"
+        op: positional.flux2_rope
+        in: ["st_khn_${i}"]
+        out: ["st_kr_${i}"]
+        config:
+          base: ${include.rope_theta}
+          head_dim: ${include.attention_head_dim}
+          latent_seq_len: ${include.latent_seq_len}
+          latent_side: ${include.latent_side}
+          mode: half
+
+      - id: "single_transformer_blocks.${i}.attn"
+        op: attention.sdpa
+        in: ["st_qr_${i}", "st_kr_${i}", "st_vh_${i}"]
+        out: ["st_attn_${i}"]
+        config: { num_heads: "${include.num_attention_heads}", head_dim: "${include.attention_head_dim}", causal: false }
+
+      - id: "st_merge_heads_${i}"
+        op: shape.merge_heads
+        in: ["st_attn_${i}"]
+        out: ["st_attn_flat_${i}"]
+
+      - id: "single_transformer_blocks.${i}.attn.to_out.0"
+        op: projection.linear
+        in: ["st_attn_flat_${i}"]
+        out: ["st_attn_out_${i}"]
+        config:
+          in_features: "${include.hidden_size}"
+          out_features: "${include.hidden_size}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_out.weight"
+            slice_axis: input
+            slice_start: 0
+
+      - id: "single_transformer_blocks.${i}.proj_mlp"
+        op: projection.linear
+        in: ["st_norm_${i}"]
+        out: ["st_gate_up_${i}"]
+        config:
+          in_features: "${include.hidden_size}"
+          out_features: "${include.mlp_packed}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_qkv_mlp_proj.weight"
+            slice_axis: output
+            slice_start: "${include.triple_hidden_size}"
+
+      - id: "st_swiglu_${i}"
+        op: activation.swiglu
+        in: ["st_gate_up_${i}"]
+        out: ["st_mlp_${i}"]
+
+      - id: "single_transformer_blocks.${i}.proj_out"
+        op: projection.linear
+        in: ["st_mlp_${i}"]
+        out: ["st_mlp_out_${i}"]
+        config:
+          in_features: "${include.mlp_inner}"
+          out_features: "${include.hidden_size}"
+          from_safetensors:
+            weight: "single_transformer_blocks.${i}.attn.to_out.weight"
+            slice_axis: input
+            slice_start: "${include.hidden_size}"
+
+      - id: "st_parallel_out_${i}"
+        op: math.add
+        in: ["st_attn_out_${i}", "st_mlp_out_${i}"]
+        out: ["st_parallel_${i}"]
+
+      - id: "st_mlp_residual_${i}"
+        op: math.gated_residual
+        in: ["h_${offset_i}", "st_parallel_${i}", single_modulation]
+        out: ["h_${next_offset_i}"]
+        config: { set: 0 }
+
+  - id: norm_out
+    op: activation.swish
+    in: [temb]
+    out: [norm_out_conditioning]
+
+  - id: norm_out.linear
+    op: projection.linear
+    in: [norm_out_conditioning]
+    out: [norm_out_modulation]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.double_hidden_size}
+
+  - id: norm_out.adaptive
+    op: math.adaptive_rmsnorm
+    in: ["h_${include.joint_terminal_index}", norm_out_modulation]
+    out: [final_norm]
+    config: { eps: "${include.eps}", affine: false }
+
+  - id: proj_out
+    op: projection.linear
+    in: [final_norm]
+    out: [sample_joint]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.in_channels}
+
+  # Joint dual+single attention has been operating on the full
+  # text + latent sequence; the diffusion scheduler only consumes
+  # the latent portion. Slice off the trailing latent_seq_len tokens
+  # here so the runtime ledger of "velocity" matches the latent shape.
+  - id: denoiser_output
+    op: shape.slice
+    in: [sample_joint]
+    out: [sample]
+    config:
+      dim: 1
+      start: -${include.latent_seq_len}
+      end: 0

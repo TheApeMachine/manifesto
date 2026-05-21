@@ -1,0 +1,29 @@
+kind: Operation
+category: tokenizer
+op: tokenizer.load
+name: TokenizerLoad
+label: Load Tokenizer
+description: Loads a tokenizer.json artifact from HuggingFace or a local path into the process-level tokenizer registry.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "HuggingFace repo (\"org/name\"), hf:// locator, or local directory"
+    required: true
+  - name: file
+    type: string
+    description: "Tokenizer file within the repo or directory (default: \"tokenizer.json\")"
+  - name: cache
+    type: string
+    description: "Local Hub cache directory (default: hub.cache_dir)"
+  - name: revision
+    type: string
+    description: "Git branch, tag, PR ref, or full commit hash (default: \"main\")"
+  - name: repo_type
+    type: string
+    description: "Hub repository type: model, dataset, or space (default: \"model\")"
+inputs: []
+outputs:
+  - name: out
+    type: scalar
+    description: Vocabulary size loaded

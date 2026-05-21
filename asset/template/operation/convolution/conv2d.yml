@@ -1,0 +1,45 @@
+kind: Operation
+category: convolution
+op: convolution.conv2d
+name: Conv2d
+label: Conv 2D
+description: 2-D convolution — [N, C_in, H, W] → [N, C_out, H_out, W_out].
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [N, in_channels, H, W]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [N, out_channels, H_out, W_out]
+config:
+  - name: in_channels
+    type: int
+  - name: out_channels
+    type: int
+  - name: kernel_h
+    type: int
+  - name: kernel_w
+    type: int
+  - name: stride_h
+    type: int
+    default: 1
+  - name: stride_w
+    type: int
+    default: 1
+  - name: pad_h
+    type: int
+    default: 0
+  - name: pad_w
+    type: int
+    default: 0
+  - name: dil_h
+    type: int
+    default: 1
+  - name: dil_w
+    type: int
+    default: 1
+  - name: groups
+    type: int
+    default: 1

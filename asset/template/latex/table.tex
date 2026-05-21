@@ -1,0 +1,40 @@
+{{- if .TabularOnly -}}
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}%
+\renewcommand{\arraystretch}{1.12}%
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{ {{- .Align -}} }
+\toprule
+{{ .Header }} \\
+\midrule
+{{- range .Rows}}
+{{ . }} \\
+{{- end}}
+\bottomrule
+\end{tabular}%
+}%
+\endgroup
+{{- else -}}
+\begin{table}[htbp]
+\centering
+\caption{ {{- .Caption -}} }
+\label{ {{- .Label -}} }
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}%
+\renewcommand{\arraystretch}{1.12}%
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{ {{- .Align -}} }
+\toprule
+{{ .Header }} \\
+\midrule
+{{- range .Rows}}
+{{ . }} \\
+{{- end}}
+\bottomrule
+\end{tabular}%
+}%
+\endgroup
+\end{table}
+{{- end }}

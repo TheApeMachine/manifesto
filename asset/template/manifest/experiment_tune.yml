@@ -1,0 +1,63 @@
+# Example: Hyperparameter tuning experiment utilizing the active inference bandit.
+# The tuner block controls the optimization pipeline using Expected Free Energy (EFE).
+
+tuner:
+  strategy: active_inference
+  metric: validation_loss
+  arms:
+    - id: "arm_1_low_lr"
+      config:
+        lr: 1e-4
+        wd: 0.01
+    - id: "arm_2_mid_lr"
+      config:
+        lr: 3e-4
+        wd: 0.01
+    - id: "arm_3_high_lr"
+      config:
+        lr: 1e-3
+        wd: 0.01
+
+trainer:
+  optimizer: train.optimizer.adamw
+  max_steps: 1000
+
+system:
+  topology:
+    nodes:
+      - id: train_data
+        op: data.huggingface
+        config:
+          dataset: glue
+          config: sst2
+          split: train
+          field: label
+          page: 64
+        out: [raw_labels]
+
+      - id: encoder
+        op: projection.linear
+        config:
+          in_features: 768
+          out_features: 2
+        in:  [raw_labels]
+        out: [logits]
+
+      - id: loss
+        op: train.loss.cross_entropy
+        in:  [logits, raw_labels]
+        out: [loss_value]
+
+      - id: grads
+        op: train.grad.cross_entropy
+        in:  [logits, raw_labels]
+        out: [grad_vec]
+
+      - id: optimizer
+        op: train.optimizer.adamw
+        config:
+          # ${tuner.lr} and ${tuner.wd} will be dynamically injected by the training loop
+          lr: ${tuner.lr}
+          wd: ${tuner.wd}
+        in:  [logits, grad_vec]
+        out: [updated_params]

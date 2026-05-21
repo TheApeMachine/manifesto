@@ -1,0 +1,18 @@
+kind: Operation
+category: train
+op: train.grad.mse
+name: MSEGrad
+label: MSE Gradient
+description: Gradient of MSE loss with respect to predictions. Wire this between your model output and the optimizer.
+initial_width: 240
+inputs:
+  - name: predictions
+    type: tensor
+    description: Model output values
+  - name: targets
+    type: tensor
+    description: Ground-truth values
+outputs:
+  - name: grads
+    type: tensor
+    description: d(MSE)/d(predictions)

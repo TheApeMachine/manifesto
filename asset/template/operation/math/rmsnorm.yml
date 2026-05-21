@@ -1,0 +1,20 @@
+kind: Operation
+category: math
+op: math.rmsnorm
+name: RMSNorm
+label: RMS Norm
+description: Root-mean-square normalization — simpler than LayerNorm, no mean subtraction.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Normalized output
+config:
+  - name: eps
+    type: float
+    default: 1e-6
+    description: Numerical stability epsilon

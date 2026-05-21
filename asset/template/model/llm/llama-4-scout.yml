@@ -1,0 +1,187 @@
+kind: Block
+category: model
+op: block.model.llama_4_scout
+name: Llama 4 Scout (17Bx16E)
+label: Llama 4 Scout (17Bx16E)
+description: Meta's Llama 4 Scout MoE architecture (17B active
+              - 109B total
+              - 16 experts).
+initial_width: 300
+inputs:
+  - name: input_ids
+    type: tensor
+    description: Input token IDs [batch
+              - seq_len
+outputs:
+  - name: logits
+    type: tensor
+    description: Output logits [batch
+              - seq_len
+              - vocab_size
+
+system:
+  topology:
+    nodes:
+      - id: embed_tokens
+        op: embedding.token
+        in:
+              - input_ids
+        out:
+              - h_0
+        config:
+          vocab_size: 128256
+          d_model: 4096
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_40
+        repeat: 40
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: 1e-05
+
+          - id: q_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - q_proj_${i}
+            config:
+              in_features: 4096
+              out_features: 4096
+
+          - id: k_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - k_proj_${i}
+            config:
+              in_features: 4096
+              out_features: 1024
+
+          - id: v_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - v_proj_${i}
+            config:
+              in_features: 4096
+              out_features: 1024
+
+          - id: rope_q_${i}
+            op: positional.rope
+            in:
+              - q_proj_${i}
+            out:
+              - q_rope_${i}
+            config:
+              base: 500000.0
+              head_dim: 128
+
+          - id: rope_k_${i}
+            op: positional.rope
+            in:
+              - k_proj_${i}
+            out:
+              - k_rope_${i}
+            config:
+              base: 500000.0
+              head_dim: 128
+
+          - id: attn_${i}
+            op: attention.gqa
+            in:
+              - q_rope_${i}
+              - k_rope_${i}
+              - v_proj_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: 4096
+              out_features: 4096
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: 1e-05
+
+          - id: moe_router_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - router_logits_${i}
+            config:
+              in_features: 4096
+              out_features: 16
+              
+          - id: moe_experts_${i}
+            op: projection.moe
+            in:
+              - norm2_${i}
+              - router_logits_${i}
+            out:
+              - down_proj_${i}
+            config:
+              in_features: 4096
+              intermediate_size: 14336
+              num_experts: 16
+              num_experts_per_tok: 2
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - down_proj_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.rmsnorm
+        in:
+              - h_40
+        out:
+              - final_norm
+        config:
+          eps: 1e-05
+
+      - id: lm_head
+        op: projection.linear
+        in:
+              - final_norm
+        out:
+              - logits
+        config:
+          in_features: 4096
+          out_features: 128256

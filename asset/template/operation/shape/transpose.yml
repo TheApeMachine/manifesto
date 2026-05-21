@@ -1,0 +1,22 @@
+kind: Operation
+category: shape
+op: shape.transpose
+name: Transpose
+label: Transpose
+description: Swaps two named dimensions of a tensor.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Transposed tensor
+config:
+  - name: dim0
+    type: int
+    description: First dimension to swap
+  - name: dim1
+    type: int
+    description: Second dimension to swap

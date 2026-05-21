@@ -1,0 +1,21 @@
+kind: Operation
+category: predictive_coding
+op: predictive_coding.update_weights
+name: PC Update Weights
+label: PC Update Weights
+description: Updates weights using Hebbian plasticity.
+initial_width: 180
+inputs:
+  - name: weights
+    type: tensor
+    description: Input tensor
+  - name: rep
+    type: tensor
+    description: Input tensor
+  - name: error
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_weights
+    type: tensor
+    description: Output tensor

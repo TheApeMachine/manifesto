@@ -1,0 +1,29 @@
+kind: Operation
+category: model
+op: model.load
+name: ModelLoad
+label: Load Model
+description: Loads a model's weights from HuggingFace or a local path into the process-level weight registry. Downstream surgery, graft, lora, adapter, and freeze nodes reference this model by its source key.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "HuggingFace repo (\"org/name\") or absolute local path"
+    required: true
+  - name: file
+    type: string
+    description: "Filename within the repo (default: \"model.safetensors\")"
+  - name: cache
+    type: string
+    description: "Local Hub cache directory (default: hub.cache_dir)"
+  - name: revision
+    type: string
+    description: "Git branch, tag, PR ref, or full commit hash (default: \"main\")"
+  - name: repo_type
+    type: string
+    description: "Hub repository type: model, dataset, or space (default: \"model\")"
+inputs: []
+outputs:
+  - name: out
+    type: scalar
+    description: Number of weight tensors loaded (trigger token for downstream nodes)

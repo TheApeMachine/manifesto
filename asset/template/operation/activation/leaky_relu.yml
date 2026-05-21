@@ -1,0 +1,20 @@
+kind: Operation
+category: activation
+op: activation.leaky_relu
+name: Leaky ReLU
+label: Leaky ReLU
+description: Leaky ReLU activation — passes negative values with a small slope (alpha).
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Activated output
+config:
+  - name: alpha
+    type: float
+    default: 0.01
+    description: Negative slope coefficient

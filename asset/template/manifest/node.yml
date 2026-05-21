@@ -1,0 +1,9 @@
+manifest:
+  kind: Node
+  name: {{ .Name }}
+  description: {{ .Description }}
+  created: {{ .Created }}
+  updated: {{ .Updated }}
+  type: {{ .Type }}
+  inputs: {{ .Inputs }}
+  outputs: {{ .Outputs }}

@@ -1,0 +1,19 @@
+kind: Operation
+category: shape
+op: shape.reshape
+name: Reshape
+label: Reshape
+description: Reshapes a tensor to a new shape (must have the same element count).
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Reshaped tensor
+config:
+  - name: shape
+    type: int[]
+    description: Target shape dimensions

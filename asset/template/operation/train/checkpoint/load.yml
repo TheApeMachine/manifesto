@@ -1,0 +1,17 @@
+kind: Operation
+category: train
+op: train.checkpoint.load
+name: CheckpointLoad
+label: Load Checkpoint
+description: Reads a parameter vector from a checkpoint file on disk and emits it. The file is loaded once and cached; subsequent calls return the same params.
+initial_width: 260
+config:
+  - name: path
+    type: string
+    description: "Path to checkpoint JSON file (required)"
+    required: true
+inputs: []
+outputs:
+  - name: params
+    type: tensor
+    description: Restored parameter vector

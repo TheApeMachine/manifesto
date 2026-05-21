@@ -1,0 +1,18 @@
+kind: Operation
+category: train
+op: train.loss.mse
+name: MSELoss
+label: MSE Loss
+description: Mean squared error between predictions and targets. Returns a single-element scalar loss.
+initial_width: 240
+inputs:
+  - name: predictions
+    type: tensor
+    description: Model output values
+  - name: targets
+    type: tensor
+    description: Ground-truth values
+outputs:
+  - name: loss
+    type: scalar
+    description: Scalar MSE loss

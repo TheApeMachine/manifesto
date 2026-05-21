@@ -1,0 +1,37 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.rmsprop
+name: RMSProp
+label: RMSProp
+description: Divides the gradient by a running average of its recent magnitude.
+initial_width: 220
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated parameter vector
+config:
+  - name: lr
+    type: float
+    default: 0.01
+  - name: alpha
+    type: float
+    default: 0.99
+  - name: eps
+    type: float
+    default: 1e-8
+  - name: momentum
+    type: float
+    default: 0.0
+  - name: wd
+    type: float
+    default: 0.0
+  - name: centered
+    type: bool
+    default: false

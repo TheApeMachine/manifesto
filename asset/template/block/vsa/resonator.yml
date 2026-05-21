@@ -1,0 +1,30 @@
+kind: Block
+category: vsa
+op: block.vsa.resonator
+name: VSA Resonator
+label: VSA Resonator
+description: A simple resonator network step.
+initial_width: 260
+inputs:
+  - name: state
+    type: tensor
+    description: Input tensor
+  - name: memory
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_state
+    type: tensor
+    description: Output tensor
+
+system:
+  topology:
+    nodes:
+      - id: calc_sim
+        op: vsa.similarity
+        in: [state, memory]
+        out: [sim]
+      - id: bundle_mem
+        op: vsa.bundle
+        in: [memory, sim]
+        out: [new_state]

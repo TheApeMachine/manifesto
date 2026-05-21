@@ -1,0 +1,18 @@
+kind: Operation
+category: active_inference
+op: active_inference.expected_free_energy
+name: Expected Free Energy
+label: Expected Free Energy
+description: Computes expected free energy for policy selection.
+initial_width: 180
+inputs:
+  - name: q_pi
+    type: tensor
+    description: Input tensor
+  - name: p_o_s
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: efe
+    type: tensor
+    description: Output tensor

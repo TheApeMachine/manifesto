@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.log
+name: Log
+label: Log
+description: Elementwise natural logarithm.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Output tensor

@@ -1,0 +1,47 @@
+kind: Block
+category: energy
+op: block.energy.langevin_step
+name: Langevin Step
+label: Langevin Step
+description: Applies one externally differentiated Langevin sampler step.
+initial_width: 280
+inputs:
+  - name: state
+    type: tensor
+    description: Current sample state
+  - name: energy_gradient
+    type: tensor
+    description: Gradient of the energy with respect to state
+  - name: noise
+    type: tensor
+    description: Noise sample matching state shape
+  - name: negative_half_step
+    type: tensor
+    description: Elementwise -epsilon / 2 scale
+  - name: noise_scale
+    type: tensor
+    description: Elementwise sqrt(epsilon) scale
+outputs:
+  - name: next_state
+    type: tensor
+    description: Sample state after one Langevin step
+
+system:
+  topology:
+    nodes:
+      - id: langevin_drift_scale
+        op: math.mul
+        in: [energy_gradient, negative_half_step]
+        out: [drift]
+      - id: langevin_noise_scale
+        op: math.mul
+        in: [noise, noise_scale]
+        out: [diffusion]
+      - id: langevin_apply_drift
+        op: math.add
+        in: [state, drift]
+        out: [drifted_state]
+      - id: langevin_apply_diffusion
+        op: math.add
+        in: [drifted_state, diffusion]
+        out: [next_state]

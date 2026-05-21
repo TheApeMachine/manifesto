@@ -1,0 +1,18 @@
+kind: Operation
+category: masking
+op: masking.apply
+name: Apply Mask
+label: Apply Mask
+description: Adds a mask to attention logits (mask contains 0 or -inf).
+initial_width: 200
+inputs:
+  - name: logits
+    type: tensor
+    description: Attention logits
+  - name: mask
+    type: tensor
+    description: Mask tensor (0 or -inf)
+outputs:
+  - name: masked
+    type: tensor
+    description: Masked logits

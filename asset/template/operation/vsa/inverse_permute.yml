@@ -1,0 +1,20 @@
+kind: Operation
+category: vsa
+op: vsa.inverse_permute
+name: VSA Inverse Permute
+label: VSA Inverse Permute
+description: Inversely permutes a hypervector.
+initial_width: 180
+config:
+  - name: k
+    type: int
+    default: 1
+    description: Permutation steps
+inputs:
+  - name: a
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: permuted
+    type: tensor
+    description: Output tensor

@@ -1,0 +1,26 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.hebbian
+name: Hebbian
+label: Hebbian
+description: Classic Hebbian learning — neurons that fire together wire together.
+initial_width: 200
+inputs:
+  - name: params
+    type: tensor
+    description: Weight vector
+  - name: grads
+    type: tensor
+    description: Hebbian update signal
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated weights
+config:
+  - name: lr
+    type: float
+    default: 0.01
+  - name: max_norm
+    type: float
+    default: 0.0
+    description: Weight clipping norm (0 = disabled)

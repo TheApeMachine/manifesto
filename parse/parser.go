@@ -32,11 +32,13 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		return nil, fmt.Errorf("parse program yaml: %w", err)
 	}
 
-	includes := document.Includes
+	rawIncludes := document.Includes
 
-	if len(includes) == 0 {
-		includes = document.Include
+	if len(rawIncludes) == 0 {
+		rawIncludes = document.Include
 	}
+
+	includes, includeObjects := parser.normalizeIncludes(rawIncludes)
 
 	rawSteps := document.Main
 
@@ -66,14 +68,31 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 	}
 
 	return &ast.Program{
-		Name:       document.Name,
-		Includes:   includes,
-		Variables:  document.Variables,
-		State:      state,
-		Schedulers: schedulers,
-		Graphs:     graphs,
-		Steps:      steps,
+		Name:           document.Name,
+		Includes:       includes,
+		IncludeObjects: includeObjects,
+		Variables:      document.Variables,
+		State:          state,
+		Schedulers:     schedulers,
+		Graphs:         graphs,
+		Steps:          steps,
 	}, nil
+}
+
+func (parser *Parser) normalizeIncludes(rawIncludes map[string]any) (map[string]string, map[string]any) {
+	includes := make(map[string]string)
+	includeObjects := make(map[string]any)
+
+	for name, value := range rawIncludes {
+		if location, ok := value.(string); ok {
+			includes[name] = location
+			continue
+		}
+
+		includeObjects[name] = value
+	}
+
+	return includes, includeObjects
 }
 
 func (parser *Parser) normalizeSteps(rawSteps []rawStep) ([]ast.Step, error) {

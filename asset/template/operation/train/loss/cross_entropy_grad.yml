@@ -1,0 +1,18 @@
+kind: Operation
+category: train
+op: train.grad.cross_entropy
+name: CrossEntropyGrad
+label: Cross-Entropy Gradient
+description: Gradient of softmax cross-entropy with respect to logits (softmax(logits) - targets). Wire between logits and the optimizer.
+initial_width: 280
+inputs:
+  - name: logits
+    type: tensor
+    description: Raw model logits
+  - name: targets
+    type: tensor
+    description: One-hot target distribution
+outputs:
+  - name: grads
+    type: tensor
+    description: d(CrossEntropy)/d(logits)

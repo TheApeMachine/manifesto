@@ -1,0 +1,37 @@
+kind: Operation
+category: convolution
+op: convolution.conv1d
+name: Conv1d
+label: Conv 1D
+description: 1-D convolution over sequences — [N, C_in, L] → [N, C_out, L_out].
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [N, in_channels, L]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [N, out_channels, L_out]
+config:
+  - name: in_channels
+    type: int
+    description: Input channel count
+  - name: out_channels
+    type: int
+    description: Output channel count
+  - name: kernel_size
+    type: int
+    description: Kernel width
+  - name: stride
+    type: int
+    default: 1
+  - name: padding
+    type: int
+    default: 0
+  - name: dilation
+    type: int
+    default: 1
+  - name: groups
+    type: int
+    default: 1

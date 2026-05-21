@@ -1,0 +1,15 @@
+kind: Operation
+category: masking
+op: masking.causal
+name: Causal Mask
+label: Causal Mask
+description: Generates a lower-triangular causal attention mask (0 = attend, -inf = mask).
+initial_width: 200
+inputs:
+  - name: seq
+    type: tensor
+    description: Sequence shape [batch, seq_len]
+outputs:
+  - name: mask
+    type: tensor
+    description: Causal mask [seq_len, seq_len]

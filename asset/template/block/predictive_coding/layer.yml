@@ -1,0 +1,44 @@
+kind: Block
+category: predictive_coding
+op: block.predictive_coding.layer
+name: Predictive Coding Layer
+label: Predictive Coding Layer
+description: A single predictive coding layer step.
+initial_width: 260
+inputs:
+  - name: rep
+    type: tensor
+    description: Input tensor
+  - name: target
+    type: tensor
+    description: Input tensor
+  - name: weights
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_rep
+    type: tensor
+    description: Output tensor
+  - name: new_weights
+    type: tensor
+    description: Output tensor
+
+system:
+  topology:
+    nodes:
+      - id: calc_pred
+        op: predictive_coding.prediction
+        in: [rep, weights]
+        out: [pred]
+      - id: calc_error
+        op: predictive_coding.prediction_error
+        in: [target, pred]
+        out: [error]
+      - id: update_r
+        op: predictive_coding.update_representation
+        in: [rep, error, weights]
+        out: [new_rep]
+      - id: update_w
+        op: predictive_coding.update_weights
+        in: [weights, rep, error]
+        out: [new_weights]

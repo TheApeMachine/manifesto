@@ -1,0 +1,32 @@
+kind: Operation
+category: model
+op: model.adapter
+name: ModelAdapter
+label: Bottleneck Adapter
+description: >
+  Inserts bottleneck adapter matrices in series at a targeted layer.
+  W_down compresses dim → dim/reduction; W_up projects back.
+  The residual connection preserves the original representation at init.
+  Adapter weights are stored in the WeightMap as <layer>.adapter.down
+  and <layer>.adapter.up so they are visible to checkpointing and fine-tuning.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "Source key — must match the model.load node's source"
+    required: true
+  - name: at
+    type: string
+    description: "Glob pattern of layers to adapt (e.g. transformer.h.* or transformer.h.*.attn)"
+    required: true
+  - name: reduction
+    type: int
+    description: "Bottleneck reduction factor — dim / reduction = bottleneck size (default: 16)"
+inputs:
+  - name: trigger
+    type: scalar
+    description: Trigger from model.load or surgery
+outputs:
+  - name: out
+    type: scalar
+    description: Number of layers adapted

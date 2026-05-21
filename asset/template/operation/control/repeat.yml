@@ -1,0 +1,19 @@
+kind: Operation
+category: control
+op: control.repeat
+name: Repeat
+label: Repeat
+description: Repeats a subgraph a specified number of times.
+initial_width: 240
+inputs:
+  - name: in
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: out
+    type: tensor
+    description: Output tensor
+config:
+  - name: count
+    type: int
+    description: Number of times to repeat

@@ -1,0 +1,18 @@
+kind: Operation
+category: vsa
+op: vsa.similarity
+name: VSA Similarity
+label: VSA Similarity
+description: Computes similarity between hypervectors.
+initial_width: 180
+inputs:
+  - name: a
+    type: tensor
+    description: Input tensor
+  - name: b
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: sim
+    type: tensor
+    description: Output tensor

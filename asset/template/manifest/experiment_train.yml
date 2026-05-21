@@ -1,0 +1,55 @@
+# Example: SST-2 sentiment classifier training run.
+# This is what the node graph editor serialises to YAML.
+# Every node type here corresponds to a registered operation.
+
+system:
+  topology:
+    nodes:
+      # ── Data ─────────────────────────────────────────────────────────────
+      - id: train_data
+        op: data.huggingface
+        config:
+          dataset: glue
+          config: sst2
+          split: train
+          field: label
+          page: 64
+        out: [raw_labels]
+
+      # ── Model (single linear projection as stand-in) ──────────────────
+      - id: encoder
+        op: projection.linear
+        config:
+          in_features: 768
+          out_features: 2
+        in:  [raw_labels]
+        out: [logits]
+
+      # ── Loss ─────────────────────────────────────────────────────────────
+      - id: loss
+        op: train.loss.cross_entropy
+        in:  [logits, raw_labels]
+        out: [loss_value]
+
+      - id: grads
+        op: train.grad.cross_entropy
+        in:  [logits, raw_labels]
+        out: [grad_vec]
+
+      # ── Optimizer ────────────────────────────────────────────────────────
+      - id: optimizer
+        op: train.optimizer.adamw
+        config:
+          lr: 2e-4
+          wd: 0.01
+        in:  [logits, grad_vec]
+        out: [updated_params]
+
+      # ── Checkpoint ───────────────────────────────────────────────────────
+      - id: checkpoint
+        op: train.checkpoint.save
+        config:
+          dir: checkpoints/sst2
+          prefix: epoch
+        in:  [updated_params]
+        out: [saved_params]

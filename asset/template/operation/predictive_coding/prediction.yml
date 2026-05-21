@@ -1,0 +1,18 @@
+kind: Operation
+category: predictive_coding
+op: predictive_coding.prediction
+name: PC Prediction
+label: PC Prediction
+description: Generates top-down predictions.
+initial_width: 180
+inputs:
+  - name: rep
+    type: tensor
+    description: Input tensor
+  - name: weights
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: pred
+    type: tensor
+    description: Output tensor

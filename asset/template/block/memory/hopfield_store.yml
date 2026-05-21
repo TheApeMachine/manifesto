@@ -1,0 +1,30 @@
+kind: Block
+category: memory
+op: block.memory.hopfield_store
+name: Hopfield Store
+label: Hopfield Store
+description: Hebbian weight accumulation — stores one pattern into the weight matrix via outer product.
+initial_width: 240
+inputs:
+  - name: pattern
+    type: tensor
+    description: Bipolar pattern vector [N] with values in {-1, +1}
+  - name: W_prev
+    type: tensor
+    description: Weight matrix before update [N, N]
+outputs:
+  - name: W
+    type: tensor
+    description: Updated weight matrix [N, N]
+
+system:
+  topology:
+    nodes:
+      - id: hopfield_outer
+        op: math.outer
+        in: [pattern, pattern]
+        out: [dW]
+      - id: hopfield_accumulate
+        op: math.add
+        in: [W_prev, dW]
+        out: [W]

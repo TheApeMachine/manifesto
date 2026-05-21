@@ -1,0 +1,181 @@
+kind: Block
+category: model
+op: block.model.diffusion_flux_2_klein_4b_text_encoder
+name: FLUX.2 Klein 4B Text Encoder
+label: FLUX.2 Klein 4B Text Encoder
+description: Qwen3ForCausalLM prompt encoder used by FLUX.2 Klein 4B.
+inputs:
+  - name: input_ids
+    type: tensor
+    description: Token IDs [batch, sequence].
+outputs:
+  - name: prompt_embeds
+    type: tensor
+    description: Concatenated hidden states [batch, sequence, 7680].
+
+system:
+  runtime:
+    type: encoder
+    backend: metal
+    model:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: text_encoder/model.safetensors.index.json
+      repo_type: model
+      revision: main
+    tokenizer:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: tokenizer/tokenizer.json
+      repo_type: model
+      revision: main
+
+  topology:
+    inputs: [input_ids]
+    nodes:
+      - id: model.embed_tokens
+        op: embedding.token
+        in: [input_ids]
+        out: [h_0]
+        config:
+          vocab_size: 151936
+          d_model: 2560
+
+      - repeat: 36
+        index: layer
+        template:
+          - id: "model.layers.${layer}.input_layernorm"
+            op: math.rmsnorm
+            in: ["h_${layer}"]
+            out: ["input_norm_${layer}"]
+            config: { eps: 1e-06 }
+
+          - id: "model.layers.${layer}.self_attn.q_proj"
+            op: projection.linear
+            in: ["input_norm_${layer}"]
+            out: ["q_${layer}"]
+            config: { in_features: 2560, out_features: 4096 }
+
+          - id: "model.layers.${layer}.self_attn.k_proj"
+            op: projection.linear
+            in: ["input_norm_${layer}"]
+            out: ["k_${layer}"]
+            config: { in_features: 2560, out_features: 1024 }
+
+          - id: "model.layers.${layer}.self_attn.v_proj"
+            op: projection.linear
+            in: ["input_norm_${layer}"]
+            out: ["v_${layer}"]
+            config: { in_features: 2560, out_features: 1024 }
+
+          - id: "q_heads_${layer}"
+            op: shape.view_as_heads
+            in: ["q_${layer}"]
+            out: ["qh_${layer}"]
+            config: { num_heads: 32 }
+
+          - id: "k_heads_${layer}"
+            op: shape.view_as_heads
+            in: ["k_${layer}"]
+            out: ["kh_${layer}"]
+            config: { num_heads: 8 }
+
+          - id: "v_heads_${layer}"
+            op: shape.view_as_heads
+            in: ["v_${layer}"]
+            out: ["vh_${layer}"]
+            config: { num_heads: 8 }
+
+          - id: "rope_q_${layer}"
+            op: positional.rope
+            in: ["qh_${layer}"]
+            out: ["qr_${layer}"]
+            config:
+              base: 1000000
+              head_dim: 128
+              mode: half
+
+          - id: "rope_k_${layer}"
+            op: positional.rope
+            in: ["kh_${layer}"]
+            out: ["kr_${layer}"]
+            config:
+              base: 1000000
+              head_dim: 128
+              mode: half
+
+          - id: "model.layers.${layer}.self_attn"
+            op: attention.gqa
+            in: ["qr_${layer}", "kr_${layer}", "vh_${layer}"]
+            out: ["attn_${layer}"]
+            config:
+              num_heads: 32
+              num_kv_heads: 8
+              head_dim: 128
+              causal: true
+
+          - id: "merge_heads_${layer}"
+            op: shape.merge_heads
+            in: ["attn_${layer}"]
+            out: ["attn_flat_${layer}"]
+
+          - id: "model.layers.${layer}.self_attn.o_proj"
+            op: projection.linear
+            in: ["attn_flat_${layer}"]
+            out: ["attn_out_${layer}"]
+            config: { in_features: 4096, out_features: 2560 }
+
+          - id: "attention_residual_${layer}"
+            op: math.add
+            in: ["h_${layer}", "attn_out_${layer}"]
+            out: ["attn_residual_${layer}"]
+
+          - id: "model.layers.${layer}.post_attention_layernorm"
+            op: math.rmsnorm
+            in: ["attn_residual_${layer}"]
+            out: ["post_norm_${layer}"]
+            config: { eps: 1e-06 }
+
+          - id: "model.layers.${layer}.mlp.gate_proj"
+            op: projection.linear
+            in: ["post_norm_${layer}"]
+            out: ["gate_${layer}"]
+            config: { in_features: 2560, out_features: 9728 }
+
+          - id: "model.layers.${layer}.mlp.up_proj"
+            op: projection.linear
+            in: ["post_norm_${layer}"]
+            out: ["up_${layer}"]
+            config: { in_features: 2560, out_features: 9728 }
+
+          - id: "gate_up_${layer}"
+            op: shape.concat
+            in: ["gate_${layer}", "up_${layer}"]
+            out: ["gate_up_${layer}"]
+            config: { dim: 2 }
+
+          - id: "swiglu_${layer}"
+            op: activation.swiglu
+            in: ["gate_up_${layer}"]
+            out: ["mlp_${layer}"]
+
+          - id: "model.layers.${layer}.mlp.down_proj"
+            op: projection.linear
+            in: ["mlp_${layer}"]
+            out: ["mlp_out_${layer}"]
+            config: { in_features: 9728, out_features: 2560 }
+
+          - id: "mlp_residual_${layer}"
+            op: math.add
+            in: ["attn_residual_${layer}", "mlp_out_${layer}"]
+            out: ["h_${next_layer}"]
+
+      - id: prompt_embeds_0
+        op: shape.concat
+        in: [h_9, h_18]
+        out: [prompt_embeds_0]
+        config: { dim: 2 }
+
+      - id: prompt_embeds
+        op: shape.concat
+        in: [prompt_embeds_0, h_27]
+        out: [prompt_embeds]
+        config: { dim: 2 }

@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.iv_estimate
+name: IV Estimate
+label: IV Estimate
+description: Computes 2SLS instrumental variable estimate.
+initial_width: 180
+inputs:
+  - name: Z
+    type: tensor
+    description: Input tensor
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: Y
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: beta_iv
+    type: tensor
+    description: Output tensor

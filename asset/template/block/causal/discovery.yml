@@ -1,0 +1,26 @@
+kind: Block
+category: causal
+op: block.causal.discovery
+name: Causal Discovery
+label: Causal Discovery
+description: Evaluates a DAG structure using Markov factorization.
+initial_width: 260
+inputs:
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: adj
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: score
+    type: tensor
+    description: Output tensor
+
+system:
+  topology:
+    nodes:
+      - id: markov_fact
+        op: causal.dag_markov_factorization
+        in: [X, adj]
+        out: [score]

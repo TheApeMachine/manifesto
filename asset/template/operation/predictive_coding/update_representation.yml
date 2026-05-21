@@ -1,0 +1,21 @@
+kind: Operation
+category: predictive_coding
+op: predictive_coding.update_representation
+name: PC Update Representation
+label: PC Update Representation
+description: Updates representations using prediction errors.
+initial_width: 180
+inputs:
+  - name: rep
+    type: tensor
+    description: Input tensor
+  - name: error
+    type: tensor
+    description: Input tensor
+  - name: weights
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_rep
+    type: tensor
+    description: Output tensor

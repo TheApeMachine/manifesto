@@ -1,0 +1,35 @@
+\subsection{ {{- .Title -}} }
+\label{sec:{{.Label}}}
+
+\paragraph{Task Description.}
+{{.TaskDescription}}
+
+\paragraph{Results.}
+{{.Results}}
+{{- if .Assessment}}
+
+\paragraph{Assessment.}
+{{.Assessment}}
+{{- end}}
+{{- if .Table}}
+
+\begin{table}[htbp]
+\centering
+{{.Table}}
+\caption{Summary metrics for {{.Title}}.}
+\label{tab:{{.Label}}}
+\end{table}
+{{- end}}
+{{- if .FigurePath}}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{ {{- .FigurePath -}} }
+{{- if .FigureCaption}}
+\caption{ {{- .FigureCaption -}} }
+{{- end}}
+{{- if .FigureLabel}}
+\label{ {{- .FigureLabel -}} }
+{{- end}}
+\end{figure}
+{{- end}}

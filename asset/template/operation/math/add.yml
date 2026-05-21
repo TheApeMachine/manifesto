@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.add
+name: Add
+label: Add
+description: Elementwise addition of two tensors.
+initial_width: 180
+inputs:
+  - name: x y
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: z
+    type: tensor
+    description: Output tensor

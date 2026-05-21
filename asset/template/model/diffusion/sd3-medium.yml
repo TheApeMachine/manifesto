@@ -1,0 +1,160 @@
+kind: Block
+category: model
+op: block.model.diffusion_sd3_medium
+name: Stable Diffusion 3 Medium
+label: Stable Diffusion 3 Medium
+description: Stability AI's SD3 Medium (MMDiT architecture
+              - 2B parameters).
+initial_width: 300
+inputs:
+  - name: hidden_states
+    type: tensor
+    description: Input latents [batch
+              - seq_len
+              - d_model
+  - name: encoder_hidden_states
+    type: tensor
+    description: Context embeddings [batch
+              - context_len
+              - context_dim
+  - name: timestep
+    type: tensor
+    description: Timestep embedding [batch
+              - pooled_dim
+outputs:
+  - name: sample
+    type: tensor
+    description: Output denoised latents [batch
+              - seq_len
+              - d_model
+
+system:
+  topology:
+    nodes:
+      - id: x_embed
+        op: projection.linear
+        in:
+              - hidden_states
+        out:
+              - h_0
+        config:
+          in_features: 1536
+          out_features: 1536
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_24
+        repeat: 24
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: 1e-06
+
+          - id: qkv_proj_${i}
+            op: projection.fused_qkv
+            in:
+              - norm1_${i}
+            out:
+              - qkv_${i}
+            config:
+              d_in: 1536
+              d_q: 1536
+              d_k: 1536
+              d_v: 1536
+
+          - id: attn_${i}
+            op: attention.sdpa
+            in:
+              - qkv_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: 1536
+              out_features: 1536
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: 1e-06
+
+          - id: gate_up_proj_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - gate_up_proj_${i}
+            config:
+              in_features: 1536
+              out_features: 12288
+
+          - id: swiglu_${i}
+            op: activation.swiglu
+            in:
+              - gate_up_proj_${i}
+            out:
+              - swiglu_out_${i}
+
+          - id: down_proj_${i}
+            op: projection.linear
+            in:
+              - swiglu_out_${i}
+            out:
+              - down_proj_${i}
+            config:
+              in_features: 6144
+              out_features: 1536
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - down_proj_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.rmsnorm
+        in:
+              - h_24
+        out:
+              - final_norm
+        config:
+          eps: 1e-06
+
+      - id: proj_out
+        op: projection.linear
+        in:
+              - final_norm
+        out:
+              - sample
+        config:
+          in_features: 1536
+          out_features: 1536

@@ -13,8 +13,8 @@ type ProgramDocument struct {
 	Kind       string                              `yaml:"kind"`
 	Name       string                              `yaml:"name"`
 	Category   string                              `yaml:"category"`
-	Includes   map[string]string                   `yaml:"includes"`
-	Include    map[string]string                   `yaml:"include"`
+	Includes   map[string]any                      `yaml:"includes"`
+	Include    map[string]any                      `yaml:"include"`
 	Variables  map[string]any                      `yaml:"variables"`
 	State      []ast.StateDeclaration              `yaml:"state"`
 	Schedulers map[string]ast.SchedulerDeclaration `yaml:"schedulers"`

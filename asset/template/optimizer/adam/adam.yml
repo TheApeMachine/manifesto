@@ -1,0 +1,35 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.adam
+name: Adam
+label: Adam
+description: Adaptive Moment Estimation — combines momentum and RMSProp. Set wd>0 for AdamW.
+initial_width: 220
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated parameter vector
+config:
+  - name: lr
+    type: float
+    default: 0.001
+  - name: beta1
+    type: float
+    default: 0.9
+  - name: beta2
+    type: float
+    default: 0.999
+  - name: eps
+    type: float
+    default: 1e-8
+  - name: wd
+    type: float
+    default: 0.0
+    description: Decoupled weight decay (AdamW when >0)

@@ -1,0 +1,26 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.bcm
+name: BCM
+label: BCM
+description: Bienenstock-Cooper-Munro — sliding threshold prevents runaway potentiation.
+initial_width: 200
+inputs:
+  - name: params
+    type: tensor
+    description: Weight vector
+  - name: grads
+    type: tensor
+    description: Activity signal
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated weights
+config:
+  - name: lr
+    type: float
+    default: 0.01
+  - name: tau
+    type: float
+    default: 100.0
+    description: Sliding threshold time constant

@@ -1,0 +1,31 @@
+kind: Operation
+category: projection
+op: projection.moe
+name: Mixture of Experts
+label: MoE
+description: Sparse Mixture of Experts projection.
+initial_width: 240
+inputs:
+  - name: x
+    type: tensor
+    description: Input [M, in_features]
+  - name: router_logits
+    type: tensor
+    description: Router logits [M, num_experts]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [M, in_features]
+config:
+  - name: in_features
+    type: int
+    description: Input feature count
+  - name: intermediate_size
+    type: int
+    description: Hidden size of each expert
+  - name: num_experts
+    type: int
+    description: Total number of experts
+  - name: num_experts_per_tok
+    type: int
+    description: Number of experts to route each token to

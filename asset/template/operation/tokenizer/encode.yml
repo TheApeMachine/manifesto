@@ -1,0 +1,45 @@
+kind: Operation
+category: tokenizer
+op: tokenizer.encode
+name: TokenizerEncode
+label: Encode Text
+description: Encodes configured text into token IDs using a tokenizer.json artifact from HuggingFace or a local path.
+initial_width: 320
+config:
+  - name: source
+    type: string
+    description: "HuggingFace repo (\"org/name\"), hf:// locator, or local directory"
+    required: true
+  - name: text
+    type: string
+    description: "Prompt text to encode"
+    required: true
+  - name: file
+    type: string
+    description: "Tokenizer file within the repo or directory (default: \"tokenizer.json\")"
+  - name: cache
+    type: string
+    description: "Local Hub cache directory (default: hub.cache_dir)"
+  - name: revision
+    type: string
+    description: "Git branch, tag, PR ref, or full commit hash (default: \"main\")"
+  - name: repo_type
+    type: string
+    description: "Hub repository type: model, dataset, or space (default: \"model\")"
+  - name: max_length
+    type: int
+    description: "Maximum token length; errors unless truncate is true"
+  - name: truncate
+    type: bool
+    description: "Truncate to max_length when the encoded sequence is too long"
+  - name: pad_to
+    type: int
+    description: "Pad output to a fixed token length"
+  - name: pad_id
+    type: int
+    description: "Token ID used when padding"
+inputs: []
+outputs:
+  - name: out
+    type: tensor
+    description: Token IDs as a flat float64 slice with shape [1, tokens]

@@ -1,0 +1,26 @@
+kind: Operation
+category: attention
+op: attention.sliding_window
+name: Sliding Window
+label: Sliding-Window Attention
+description: Local attention within a fixed window — O(n*w) instead of O(n²).
+initial_width: 260
+inputs:
+  - name: q
+    type: tensor
+    description: Query — [batch, num_heads, seq_len, head_dim]
+  - name: k
+    type: tensor
+    description: Key — [batch, num_heads, seq_len, head_dim]
+  - name: v
+    type: tensor
+    description: Value — [batch, num_heads, seq_len, head_dim]
+outputs:
+  - name: out
+    type: tensor
+    description: Attention output — [batch, num_heads, seq_len, head_dim]
+config:
+  - name: window
+    type: int
+    default: 512
+    description: One-sided attention window size

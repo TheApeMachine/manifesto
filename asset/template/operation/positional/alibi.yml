@@ -1,0 +1,23 @@
+kind: Operation
+category: positional
+op: positional.alibi
+name: ALiBi
+label: ALiBi
+description: Attention with Linear Biases — adds position-dependent bias to attention scores.
+initial_width: 200
+inputs:
+  - name: scores
+    type: tensor
+    description: Attention scores [batch, num_heads, seq_len, seq_len]
+outputs:
+  - name: biased
+    type: tensor
+    description: Scores with ALiBi bias applied
+config:
+  - name: num_heads
+    type: int
+    description: Number of attention heads
+  - name: causal
+    type: bool
+    default: true
+    description: Apply causal masking

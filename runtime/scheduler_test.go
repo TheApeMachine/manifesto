@@ -32,7 +32,7 @@ func TestFlowMatchEulerDiscreteTimesteps(testingObject *testing.T) {
 	})
 }
 
-func TestFlowMatchEulerDiscreteStep(testingObject *testing.T) {
+func TestFlowMatchEulerDiscreteDelta(testingObject *testing.T) {
 	convey.Convey("Given a flow-match Euler scheduler", testingObject, func() {
 		scheduler, err := NewFlowMatchEulerDiscrete(SchedulerConfig{
 			Steps:             4,
@@ -41,11 +41,8 @@ func TestFlowMatchEulerDiscreteStep(testingObject *testing.T) {
 
 		convey.So(err, convey.ShouldBeNil)
 
-		convey.Convey("It should integrate over one sigma interval", func() {
-			updated, err := scheduler.Step([]float32{1}, []float32{4}, 1000)
-
-			convey.So(err, convey.ShouldBeNil)
-			convey.So(updated, convey.ShouldResemble, []float32{0})
+		convey.Convey("It should expose the sigma interval as data", func() {
+			convey.So(scheduler.Delta(1000), convey.ShouldEqual, float32(-0.25))
 		})
 	})
 }

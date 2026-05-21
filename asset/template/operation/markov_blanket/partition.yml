@@ -1,0 +1,18 @@
+kind: Operation
+category: markov_blanket
+op: markov_blanket.partition
+name: MB Partition
+label: MB Partition
+description: Partitions state into sensory, active, internal, external.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+  - name: masks
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: partitioned
+    type: tensor
+    description: Output tensor

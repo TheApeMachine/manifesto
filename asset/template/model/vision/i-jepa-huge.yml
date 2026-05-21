@@ -1,0 +1,141 @@
+kind: Block
+category: model
+op: block.model.vision_i_jepa_huge
+name: I-JEPA Huge
+label: I-JEPA Huge
+description: Meta's Image Joint-Embedding Predictive Architecture (ViT-Huge backbone).
+initial_width: 300
+inputs:
+  - name: pixel_values
+    type: tensor
+    description: Input images [batch
+              - channels
+              - height
+              - width
+outputs:
+  - name: representations
+    type: tensor
+    description: Output abstract representations [batch
+              - seq_len
+              - d_model
+
+system:
+  topology:
+    nodes:
+      - id: patch_embed
+        op: projection.linear
+        in:
+              - pixel_values
+        out:
+              - h_0
+        config:
+          in_features: 768  # 3 * patch_size * patch_size
+          out_features: 1280
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_32
+        repeat: 32
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.layernorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: 1e-06
+
+          - id: qkv_proj_${i}
+            op: projection.fused_qkv
+            in:
+              - norm1_${i}
+            out:
+              - qkv_${i}
+            config:
+              d_in: 1280
+              d_q: 1280
+              d_k: 1280
+              d_v: 1280
+
+          - id: attn_${i}
+            op: attention.sdpa
+            in:
+              - qkv_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: 1280
+              out_features: 1280
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.layernorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: 1e-06
+
+          - id: mlp_up_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - mlp_up_${i}
+            config:
+              in_features: 1280
+              out_features: 5120
+
+          - id: mlp_act_${i}
+            op: activation.gelu
+            in:
+              - mlp_up_${i}
+            out:
+              - mlp_act_${i}
+
+          - id: mlp_down_${i}
+            op: projection.linear
+            in:
+              - mlp_act_${i}
+            out:
+              - mlp_down_${i}
+            config:
+              in_features: 5120
+              out_features: 1280
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - mlp_down_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.layernorm
+        in:
+              - h_32
+        out:
+              - representations
+        config:
+          eps: 1e-06

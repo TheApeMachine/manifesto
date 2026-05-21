@@ -1,0 +1,679 @@
+kind: Block
+category: model
+op: block.model.diffusion_flux_2_klein_4b_vae_decoder
+name: FLUX.2 Klein 4B VAE Decoder
+label: FLUX.2 Klein 4B VAE Decoder
+description: AutoencoderKLFlux2 decoder for unpacking FLUX.2 latent tokens into RGB pixels.
+initial_width: 320
+inputs:
+  - name: latents
+    type: tensor
+    description: Packed latent tokens [1, 4096, 128] for a 1024x1024 image.
+outputs:
+  - name: image
+    type: tensor
+    description: Decoded RGB tensor [1, 3, 1024, 1024].
+
+system:
+  topology:
+    inputs: [latents]
+    nodes:
+      - id: vae.unpack.grid
+        op: shape.reshape
+        in: [latents]
+        out: [packed_grid]
+        config: { shape: [1, 64, 64, 128] }
+      - id: vae.unpack.pack_t23
+        op: shape.transpose
+        in: [packed_grid]
+        out: [packed_t23]
+        config: { dim0: 2, dim1: 3 }
+      - id: vae.unpack.pack_t12
+        op: shape.transpose
+        in: [packed_t23]
+        out: [packed_latent]
+        config: { dim0: 1, dim1: 2 }
+
+      - id: bn
+        op: math.batchnorm_denorm
+        in: [packed_latent]
+        out: [denorm_packed_latent]
+        config:
+          channels: 128
+          mean: bn.running_mean
+          variance: bn.running_var
+
+      - id: vae.unpack.unpatch_grid
+        op: shape.reshape
+        in: [denorm_packed_latent]
+        out: [unpatch_grid]
+        config: { shape: [1, 32, 2, 2, 64, 64] }
+      - id: vae.unpack.unpatch_t34
+        op: shape.transpose
+        in: [unpatch_grid]
+        out: [unpatch_t34]
+        config: { dim0: 3, dim1: 4 }
+      - id: vae.unpack.unpatch_t23
+        op: shape.transpose
+        in: [unpatch_t34]
+        out: [unpatch_t23]
+        config: { dim0: 2, dim1: 3 }
+      - id: vae.unpack.unpatch_t45
+        op: shape.transpose
+        in: [unpatch_t23]
+        out: [unpatch_t45]
+        config: { dim0: 4, dim1: 5 }
+      - id: vae.unpack.latent
+        op: shape.reshape
+        in: [unpatch_t45]
+        out: [latent_image]
+        config: { shape: [1, 32, 128, 128] }
+
+      - id: post_quant_conv
+        op: convolution.conv2d
+        in: [latent_image]
+        out: [post_quant]
+        config: { in_channels: 32, out_channels: 32, kernel_h: 1, kernel_w: 1, stride_h: 1, stride_w: 1, pad_h: 0, pad_w: 0 }
+      - id: decoder.conv_in
+        op: convolution.conv2d
+        in: [post_quant]
+        out: [decoder_h0]
+        config: { in_channels: 32, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+
+      - id: decoder.mid_block.resnets.0.norm1
+        op: math.groupnorm
+        in: [decoder_h0]
+        out: [mid_r0_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: mid_r0_swish1
+        op: activation.swish
+        in: [mid_r0_norm1]
+        out: [mid_r0_act1]
+      - id: decoder.mid_block.resnets.0.conv1
+        op: convolution.conv2d
+        in: [mid_r0_act1]
+        out: [mid_r0_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.mid_block.resnets.0.norm2
+        op: math.groupnorm
+        in: [mid_r0_conv1]
+        out: [mid_r0_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: mid_r0_swish2
+        op: activation.swish
+        in: [mid_r0_norm2]
+        out: [mid_r0_act2]
+      - id: decoder.mid_block.resnets.0.conv2
+        op: convolution.conv2d
+        in: [mid_r0_act2]
+        out: [mid_r0_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: mid_r0_residual
+        op: math.add
+        in: [decoder_h0, mid_r0_conv2]
+        out: [mid_h0]
+
+      - id: decoder.mid_block.attentions.0.group_norm
+        op: math.groupnorm
+        in: [mid_h0]
+        out: [mid_attn_norm]
+        config: { groups: 32, eps: 1e-06 }
+      - id: mid_attn_nhwc_0
+        op: shape.transpose
+        in: [mid_attn_norm]
+        out: [mid_attn_bhcw]
+        config: { dim0: 1, dim1: 2 }
+      - id: mid_attn_nhwc_1
+        op: shape.transpose
+        in: [mid_attn_bhcw]
+        out: [mid_attn_bhwc]
+        config: { dim0: 2, dim1: 3 }
+      - id: mid_attn_tokens
+        op: shape.reshape
+        in: [mid_attn_bhwc]
+        out: [mid_attn_tokens]
+        config: { shape: [1, 16384, 512] }
+      - id: decoder.mid_block.attentions.0.to_q
+        op: projection.linear
+        in: [mid_attn_tokens]
+        out: [mid_attn_q]
+        config: { in_features: 512, out_features: 512 }
+      - id: decoder.mid_block.attentions.0.to_k
+        op: projection.linear
+        in: [mid_attn_tokens]
+        out: [mid_attn_k]
+        config: { in_features: 512, out_features: 512 }
+      - id: decoder.mid_block.attentions.0.to_v
+        op: projection.linear
+        in: [mid_attn_tokens]
+        out: [mid_attn_v]
+        config: { in_features: 512, out_features: 512 }
+      - id: mid_attn_q_heads
+        op: shape.view_as_heads
+        in: [mid_attn_q]
+        out: [mid_attn_qh]
+        config: { num_heads: 1 }
+      - id: mid_attn_k_heads
+        op: shape.view_as_heads
+        in: [mid_attn_k]
+        out: [mid_attn_kh]
+        config: { num_heads: 1 }
+      - id: mid_attn_v_heads
+        op: shape.view_as_heads
+        in: [mid_attn_v]
+        out: [mid_attn_vh]
+        config: { num_heads: 1 }
+      - id: mid_attn_sdpa
+        op: attention.sdpa
+        in: [mid_attn_qh, mid_attn_kh, mid_attn_vh]
+        out: [mid_attn_oh]
+        config: { causal: false, num_heads: 1, head_dim: 512 }
+      - id: mid_attn_merge
+        op: shape.merge_heads
+        in: [mid_attn_oh]
+        out: [mid_attn_merged]
+      - id: mid_attn_flat
+        op: shape.reshape
+        in: [mid_attn_merged]
+        out: [mid_attn_flat]
+        config: { shape: [1, 16384, 512] }
+      - id: decoder.mid_block.attentions.0.to_out.0
+        op: projection.linear
+        in: [mid_attn_flat]
+        out: [mid_attn_projected]
+        config: { in_features: 512, out_features: 512 }
+      - id: mid_attn_bhwc_restore
+        op: shape.reshape
+        in: [mid_attn_projected]
+        out: [mid_attn_bhwc_restore]
+        config: { shape: [1, 128, 128, 512] }
+      - id: mid_attn_nchw_0
+        op: shape.transpose
+        in: [mid_attn_bhwc_restore]
+        out: [mid_attn_bhcw_restore]
+        config: { dim0: 2, dim1: 3 }
+      - id: mid_attn_nchw_1
+        op: shape.transpose
+        in: [mid_attn_bhcw_restore]
+        out: [mid_attn_nchw]
+        config: { dim0: 1, dim1: 2 }
+      - id: mid_attn_residual
+        op: math.add
+        in: [mid_h0, mid_attn_nchw]
+        out: [mid_h1]
+
+      - id: decoder.mid_block.resnets.1.norm1
+        op: math.groupnorm
+        in: [mid_h1]
+        out: [mid_r1_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: mid_r1_swish1
+        op: activation.swish
+        in: [mid_r1_norm1]
+        out: [mid_r1_act1]
+      - id: decoder.mid_block.resnets.1.conv1
+        op: convolution.conv2d
+        in: [mid_r1_act1]
+        out: [mid_r1_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.mid_block.resnets.1.norm2
+        op: math.groupnorm
+        in: [mid_r1_conv1]
+        out: [mid_r1_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: mid_r1_swish2
+        op: activation.swish
+        in: [mid_r1_norm2]
+        out: [mid_r1_act2]
+      - id: decoder.mid_block.resnets.1.conv2
+        op: convolution.conv2d
+        in: [mid_r1_act2]
+        out: [mid_r1_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: mid_r1_residual
+        op: math.add
+        in: [mid_h1, mid_r1_conv2]
+        out: [up0_in]
+
+      - id: decoder.up_blocks.0.resnets.0.norm1
+        op: math.groupnorm
+        in: [up0_in]
+        out: [up0_r0_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r0_swish1
+        op: activation.swish
+        in: [up0_r0_norm1]
+        out: [up0_r0_act1]
+      - id: decoder.up_blocks.0.resnets.0.conv1
+        op: convolution.conv2d
+        in: [up0_r0_act1]
+        out: [up0_r0_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.0.resnets.0.norm2
+        op: math.groupnorm
+        in: [up0_r0_conv1]
+        out: [up0_r0_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r0_swish2
+        op: activation.swish
+        in: [up0_r0_norm2]
+        out: [up0_r0_act2]
+      - id: decoder.up_blocks.0.resnets.0.conv2
+        op: convolution.conv2d
+        in: [up0_r0_act2]
+        out: [up0_r0_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up0_r0_residual
+        op: math.add
+        in: [up0_in, up0_r0_conv2]
+        out: [up0_h0]
+      - id: decoder.up_blocks.0.resnets.1.norm1
+        op: math.groupnorm
+        in: [up0_h0]
+        out: [up0_r1_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r1_swish1
+        op: activation.swish
+        in: [up0_r1_norm1]
+        out: [up0_r1_act1]
+      - id: decoder.up_blocks.0.resnets.1.conv1
+        op: convolution.conv2d
+        in: [up0_r1_act1]
+        out: [up0_r1_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.0.resnets.1.norm2
+        op: math.groupnorm
+        in: [up0_r1_conv1]
+        out: [up0_r1_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r1_swish2
+        op: activation.swish
+        in: [up0_r1_norm2]
+        out: [up0_r1_act2]
+      - id: decoder.up_blocks.0.resnets.1.conv2
+        op: convolution.conv2d
+        in: [up0_r1_act2]
+        out: [up0_r1_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up0_r1_residual
+        op: math.add
+        in: [up0_h0, up0_r1_conv2]
+        out: [up0_h1]
+      - id: decoder.up_blocks.0.resnets.2.norm1
+        op: math.groupnorm
+        in: [up0_h1]
+        out: [up0_r2_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r2_swish1
+        op: activation.swish
+        in: [up0_r2_norm1]
+        out: [up0_r2_act1]
+      - id: decoder.up_blocks.0.resnets.2.conv1
+        op: convolution.conv2d
+        in: [up0_r2_act1]
+        out: [up0_r2_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.0.resnets.2.norm2
+        op: math.groupnorm
+        in: [up0_r2_conv1]
+        out: [up0_r2_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up0_r2_swish2
+        op: activation.swish
+        in: [up0_r2_norm2]
+        out: [up0_r2_act2]
+      - id: decoder.up_blocks.0.resnets.2.conv2
+        op: convolution.conv2d
+        in: [up0_r2_act2]
+        out: [up0_r2_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up0_r2_residual
+        op: math.add
+        in: [up0_h1, up0_r2_conv2]
+        out: [up0_h2]
+      - id: up0_nearest
+        op: shape.upsample_nearest2d
+        in: [up0_h2]
+        out: [up0_up]
+        config: { scale_h: 2, scale_w: 2 }
+      - id: decoder.up_blocks.0.upsamplers.0.conv
+        op: convolution.conv2d
+        in: [up0_up]
+        out: [up1_in]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+
+      - id: decoder.up_blocks.1.resnets.0.norm1
+        op: math.groupnorm
+        in: [up1_in]
+        out: [up1_r0_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r0_swish1
+        op: activation.swish
+        in: [up1_r0_norm1]
+        out: [up1_r0_act1]
+      - id: decoder.up_blocks.1.resnets.0.conv1
+        op: convolution.conv2d
+        in: [up1_r0_act1]
+        out: [up1_r0_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.1.resnets.0.norm2
+        op: math.groupnorm
+        in: [up1_r0_conv1]
+        out: [up1_r0_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r0_swish2
+        op: activation.swish
+        in: [up1_r0_norm2]
+        out: [up1_r0_act2]
+      - id: decoder.up_blocks.1.resnets.0.conv2
+        op: convolution.conv2d
+        in: [up1_r0_act2]
+        out: [up1_r0_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up1_r0_residual
+        op: math.add
+        in: [up1_in, up1_r0_conv2]
+        out: [up1_h0]
+      - id: decoder.up_blocks.1.resnets.1.norm1
+        op: math.groupnorm
+        in: [up1_h0]
+        out: [up1_r1_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r1_swish1
+        op: activation.swish
+        in: [up1_r1_norm1]
+        out: [up1_r1_act1]
+      - id: decoder.up_blocks.1.resnets.1.conv1
+        op: convolution.conv2d
+        in: [up1_r1_act1]
+        out: [up1_r1_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.1.resnets.1.norm2
+        op: math.groupnorm
+        in: [up1_r1_conv1]
+        out: [up1_r1_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r1_swish2
+        op: activation.swish
+        in: [up1_r1_norm2]
+        out: [up1_r1_act2]
+      - id: decoder.up_blocks.1.resnets.1.conv2
+        op: convolution.conv2d
+        in: [up1_r1_act2]
+        out: [up1_r1_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up1_r1_residual
+        op: math.add
+        in: [up1_h0, up1_r1_conv2]
+        out: [up1_h1]
+      - id: decoder.up_blocks.1.resnets.2.norm1
+        op: math.groupnorm
+        in: [up1_h1]
+        out: [up1_r2_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r2_swish1
+        op: activation.swish
+        in: [up1_r2_norm1]
+        out: [up1_r2_act1]
+      - id: decoder.up_blocks.1.resnets.2.conv1
+        op: convolution.conv2d
+        in: [up1_r2_act1]
+        out: [up1_r2_conv1]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.1.resnets.2.norm2
+        op: math.groupnorm
+        in: [up1_r2_conv1]
+        out: [up1_r2_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up1_r2_swish2
+        op: activation.swish
+        in: [up1_r2_norm2]
+        out: [up1_r2_act2]
+      - id: decoder.up_blocks.1.resnets.2.conv2
+        op: convolution.conv2d
+        in: [up1_r2_act2]
+        out: [up1_r2_conv2]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up1_r2_residual
+        op: math.add
+        in: [up1_h1, up1_r2_conv2]
+        out: [up1_h2]
+      - id: up1_nearest
+        op: shape.upsample_nearest2d
+        in: [up1_h2]
+        out: [up1_up]
+        config: { scale_h: 2, scale_w: 2 }
+      - id: decoder.up_blocks.1.upsamplers.0.conv
+        op: convolution.conv2d
+        in: [up1_up]
+        out: [up2_in]
+        config: { in_channels: 512, out_channels: 512, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+
+      - id: decoder.up_blocks.2.resnets.0.norm1
+        op: math.groupnorm
+        in: [up2_in]
+        out: [up2_r0_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r0_swish1
+        op: activation.swish
+        in: [up2_r0_norm1]
+        out: [up2_r0_act1]
+      - id: decoder.up_blocks.2.resnets.0.conv1
+        op: convolution.conv2d
+        in: [up2_r0_act1]
+        out: [up2_r0_conv1]
+        config: { in_channels: 512, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.2.resnets.0.norm2
+        op: math.groupnorm
+        in: [up2_r0_conv1]
+        out: [up2_r0_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r0_swish2
+        op: activation.swish
+        in: [up2_r0_norm2]
+        out: [up2_r0_act2]
+      - id: decoder.up_blocks.2.resnets.0.conv2
+        op: convolution.conv2d
+        in: [up2_r0_act2]
+        out: [up2_r0_conv2]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.2.resnets.0.conv_shortcut
+        op: convolution.conv2d
+        in: [up2_in]
+        out: [up2_r0_shortcut]
+        config: { in_channels: 512, out_channels: 256, kernel_h: 1, kernel_w: 1, stride_h: 1, stride_w: 1, pad_h: 0, pad_w: 0 }
+      - id: up2_r0_residual
+        op: math.add
+        in: [up2_r0_shortcut, up2_r0_conv2]
+        out: [up2_h0]
+      - id: decoder.up_blocks.2.resnets.1.norm1
+        op: math.groupnorm
+        in: [up2_h0]
+        out: [up2_r1_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r1_swish1
+        op: activation.swish
+        in: [up2_r1_norm1]
+        out: [up2_r1_act1]
+      - id: decoder.up_blocks.2.resnets.1.conv1
+        op: convolution.conv2d
+        in: [up2_r1_act1]
+        out: [up2_r1_conv1]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.2.resnets.1.norm2
+        op: math.groupnorm
+        in: [up2_r1_conv1]
+        out: [up2_r1_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r1_swish2
+        op: activation.swish
+        in: [up2_r1_norm2]
+        out: [up2_r1_act2]
+      - id: decoder.up_blocks.2.resnets.1.conv2
+        op: convolution.conv2d
+        in: [up2_r1_act2]
+        out: [up2_r1_conv2]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up2_r1_residual
+        op: math.add
+        in: [up2_h0, up2_r1_conv2]
+        out: [up2_h1]
+      - id: decoder.up_blocks.2.resnets.2.norm1
+        op: math.groupnorm
+        in: [up2_h1]
+        out: [up2_r2_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r2_swish1
+        op: activation.swish
+        in: [up2_r2_norm1]
+        out: [up2_r2_act1]
+      - id: decoder.up_blocks.2.resnets.2.conv1
+        op: convolution.conv2d
+        in: [up2_r2_act1]
+        out: [up2_r2_conv1]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.2.resnets.2.norm2
+        op: math.groupnorm
+        in: [up2_r2_conv1]
+        out: [up2_r2_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up2_r2_swish2
+        op: activation.swish
+        in: [up2_r2_norm2]
+        out: [up2_r2_act2]
+      - id: decoder.up_blocks.2.resnets.2.conv2
+        op: convolution.conv2d
+        in: [up2_r2_act2]
+        out: [up2_r2_conv2]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up2_r2_residual
+        op: math.add
+        in: [up2_h1, up2_r2_conv2]
+        out: [up2_h2]
+      - id: up2_nearest
+        op: shape.upsample_nearest2d
+        in: [up2_h2]
+        out: [up2_up]
+        config: { scale_h: 2, scale_w: 2 }
+      - id: decoder.up_blocks.2.upsamplers.0.conv
+        op: convolution.conv2d
+        in: [up2_up]
+        out: [up3_in]
+        config: { in_channels: 256, out_channels: 256, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+
+      - id: decoder.up_blocks.3.resnets.0.norm1
+        op: math.groupnorm
+        in: [up3_in]
+        out: [up3_r0_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r0_swish1
+        op: activation.swish
+        in: [up3_r0_norm1]
+        out: [up3_r0_act1]
+      - id: decoder.up_blocks.3.resnets.0.conv1
+        op: convolution.conv2d
+        in: [up3_r0_act1]
+        out: [up3_r0_conv1]
+        config: { in_channels: 256, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.3.resnets.0.norm2
+        op: math.groupnorm
+        in: [up3_r0_conv1]
+        out: [up3_r0_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r0_swish2
+        op: activation.swish
+        in: [up3_r0_norm2]
+        out: [up3_r0_act2]
+      - id: decoder.up_blocks.3.resnets.0.conv2
+        op: convolution.conv2d
+        in: [up3_r0_act2]
+        out: [up3_r0_conv2]
+        config: { in_channels: 128, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.3.resnets.0.conv_shortcut
+        op: convolution.conv2d
+        in: [up3_in]
+        out: [up3_r0_shortcut]
+        config: { in_channels: 256, out_channels: 128, kernel_h: 1, kernel_w: 1, stride_h: 1, stride_w: 1, pad_h: 0, pad_w: 0 }
+      - id: up3_r0_residual
+        op: math.add
+        in: [up3_r0_shortcut, up3_r0_conv2]
+        out: [up3_h0]
+      - id: decoder.up_blocks.3.resnets.1.norm1
+        op: math.groupnorm
+        in: [up3_h0]
+        out: [up3_r1_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r1_swish1
+        op: activation.swish
+        in: [up3_r1_norm1]
+        out: [up3_r1_act1]
+      - id: decoder.up_blocks.3.resnets.1.conv1
+        op: convolution.conv2d
+        in: [up3_r1_act1]
+        out: [up3_r1_conv1]
+        config: { in_channels: 128, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.3.resnets.1.norm2
+        op: math.groupnorm
+        in: [up3_r1_conv1]
+        out: [up3_r1_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r1_swish2
+        op: activation.swish
+        in: [up3_r1_norm2]
+        out: [up3_r1_act2]
+      - id: decoder.up_blocks.3.resnets.1.conv2
+        op: convolution.conv2d
+        in: [up3_r1_act2]
+        out: [up3_r1_conv2]
+        config: { in_channels: 128, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up3_r1_residual
+        op: math.add
+        in: [up3_h0, up3_r1_conv2]
+        out: [up3_h1]
+      - id: decoder.up_blocks.3.resnets.2.norm1
+        op: math.groupnorm
+        in: [up3_h1]
+        out: [up3_r2_norm1]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r2_swish1
+        op: activation.swish
+        in: [up3_r2_norm1]
+        out: [up3_r2_act1]
+      - id: decoder.up_blocks.3.resnets.2.conv1
+        op: convolution.conv2d
+        in: [up3_r2_act1]
+        out: [up3_r2_conv1]
+        config: { in_channels: 128, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: decoder.up_blocks.3.resnets.2.norm2
+        op: math.groupnorm
+        in: [up3_r2_conv1]
+        out: [up3_r2_norm2]
+        config: { groups: 32, eps: 1e-06 }
+      - id: up3_r2_swish2
+        op: activation.swish
+        in: [up3_r2_norm2]
+        out: [up3_r2_act2]
+      - id: decoder.up_blocks.3.resnets.2.conv2
+        op: convolution.conv2d
+        in: [up3_r2_act2]
+        out: [up3_r2_conv2]
+        config: { in_channels: 128, out_channels: 128, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }
+      - id: up3_r2_residual
+        op: math.add
+        in: [up3_h1, up3_r2_conv2]
+        out: [decoder_final_hidden]
+
+      - id: decoder.conv_norm_out
+        op: math.groupnorm
+        in: [decoder_final_hidden]
+        out: [decoder_norm_out]
+        config: { groups: 32, eps: 1e-06 }
+      - id: decoder.swish_out
+        op: activation.swish
+        in: [decoder_norm_out]
+        out: [decoder_act_out]
+      - id: decoder.conv_out
+        op: convolution.conv2d
+        in: [decoder_act_out]
+        out: [image]
+        config: { in_channels: 128, out_channels: 3, kernel_h: 3, kernel_w: 3, stride_h: 1, stride_w: 1, pad_h: 1, pad_w: 1 }

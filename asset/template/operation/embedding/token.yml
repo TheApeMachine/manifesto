@@ -1,0 +1,26 @@
+kind: Operation
+category: embedding
+op: embedding.token
+name: Token Embedding
+label: Token Embedding
+description: Maps integer token IDs to dense embedding vectors.
+initial_width: 220
+inputs:
+  - name: ids
+    type: tensor
+    description: Token IDs [batch, seq_len]
+outputs:
+  - name: embeds
+    type: tensor
+    description: Embedding vectors [batch, seq_len, d_model]
+config:
+  - name: vocab_size
+    type: int
+    description: Vocabulary size
+  - name: d_model
+    type: int
+    description: Embedding dimension
+  - name: init_std
+    type: float
+    default: 0.02
+    description: Weight initialization std

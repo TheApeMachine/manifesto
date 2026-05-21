@@ -4,13 +4,14 @@ package ast
 Program is a manifest runtime program: IO, control flow, graph calls, and state.
 */
 type Program struct {
-	Name       string
-	Includes   map[string]string
-	Variables  map[string]any
-	State      []StateDeclaration
-	Schedulers map[string]SchedulerDeclaration
-	Graphs     map[string]GraphModule
-	Steps      []Step
+	Name           string
+	Includes       map[string]string
+	IncludeObjects map[string]any
+	Variables      map[string]any
+	State          []StateDeclaration
+	Schedulers     map[string]SchedulerDeclaration
+	Graphs         map[string]GraphModule
+	Steps          []Step
 }
 
 /*

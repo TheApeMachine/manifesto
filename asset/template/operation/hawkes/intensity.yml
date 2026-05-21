@@ -1,0 +1,24 @@
+kind: Operation
+category: hawkes
+op: hawkes.intensity
+name: Hawkes Intensity
+label: Hawkes Intensity
+description: Computes Hawkes process intensity.
+initial_width: 180
+inputs:
+  - name: times
+    type: tensor
+    description: Input tensor
+  - name: alpha
+    type: tensor
+    description: Input tensor
+  - name: beta
+    type: tensor
+    description: Input tensor
+  - name: mu
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: intensity
+    type: tensor
+    description: Output tensor

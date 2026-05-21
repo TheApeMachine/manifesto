@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.cos
+name: Cos
+label: Cos
+description: Elementwise cos(x). Cephes-style range reduction + minimax polynomial, vectorized across AVX2/SSE2/NEON on CPU and the GPU cos unit on Metal.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor (elementwise)
+outputs:
+  - name: y
+    type: tensor
+    description: cos(x) elementwise, same shape as input

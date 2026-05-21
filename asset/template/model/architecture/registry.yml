@@ -1,0 +1,46 @@
+architectures:
+  AutoencoderKLFlux2:
+    include: model.diffusion.flux-2-klein-4b-vae-decoder
+
+  Flux2Transformer2DModel:
+    include: model.architecture.flux2
+    variables:
+      in_channels: { config: in_channels }
+      hidden_size:
+        product:
+          - { config: num_attention_heads }
+          - { config: attention_head_dim }
+      double_hidden_size:
+        product:
+          - { config: num_attention_heads }
+          - { config: attention_head_dim }
+          - { literal: 2 }
+      triple_hidden_size:
+        product:
+          - { config: num_attention_heads }
+          - { config: attention_head_dim }
+          - { literal: 3 }
+      joint_attention_dim: { config: joint_attention_dim }
+      num_layers: { config: num_layers }
+      num_single_layers: { config: num_single_layers }
+      num_attention_heads: { config: num_attention_heads }
+      attention_head_dim: { config: attention_head_dim }
+      mlp_inner:
+        product:
+          - { config: num_attention_heads }
+          - { config: attention_head_dim }
+          - { config: mlp_ratio }
+      mlp_packed:
+        product:
+          - { config: num_attention_heads }
+          - { config: attention_head_dim }
+          - { config: mlp_ratio }
+          - { literal: 2 }
+      rope_theta: { config: rope_theta }
+      eps: { config: eps }
+      latent_seq_len: { literal: 4096 }
+      latent_side: { literal: 64 }
+      joint_terminal_index:
+        sum:
+          - { config: num_layers }
+          - { config: num_single_layers }

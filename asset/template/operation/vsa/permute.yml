@@ -1,0 +1,20 @@
+kind: Operation
+category: vsa
+op: vsa.permute
+name: VSA Permute
+label: VSA Permute
+description: Permutes a hypervector.
+initial_width: 180
+config:
+  - name: k
+    type: int
+    default: 1
+    description: Permutation steps
+inputs:
+  - name: a
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: permuted
+    type: tensor
+    description: Output tensor

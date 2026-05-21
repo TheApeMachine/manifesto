@@ -1,0 +1,34 @@
+kind: Operation
+category: train
+op: train.optimizer.lamb
+name: LAMB
+label: LAMB Optimizer
+description: Layer-wise adaptive moments optimizer with trust-ratio scaling.
+initial_width: 260
+config:
+  - name: lr
+    type: float
+    description: "Learning rate (default: 0.001)"
+  - name: beta1
+    type: float
+    description: "First moment decay (default: 0.9)"
+  - name: beta2
+    type: float
+    description: "Second moment decay (default: 0.999)"
+  - name: eps
+    type: float
+    description: "Numerical stability (default: 1e-6)"
+  - name: wd
+    type: float
+    description: "Weight decay (default: 0)"
+inputs:
+  - name: params
+    type: tensor
+    description: Current parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: params
+    type: tensor
+    description: Updated parameter vector

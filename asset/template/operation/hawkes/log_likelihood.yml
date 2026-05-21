@@ -1,0 +1,18 @@
+kind: Operation
+category: hawkes
+op: hawkes.log_likelihood
+name: Hawkes Log Likelihood
+label: Hawkes Log Likelihood
+description: Computes Hawkes process log likelihood.
+initial_width: 180
+inputs:
+  - name: intensities
+    type: tensor
+    description: Input tensor
+  - name: integral
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: log_lik
+    type: tensor
+    description: Output tensor

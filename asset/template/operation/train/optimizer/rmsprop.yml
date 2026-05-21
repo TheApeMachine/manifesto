@@ -1,0 +1,34 @@
+kind: Operation
+category: train
+op: train.optimizer.rmsprop
+name: RMSProp
+label: RMSProp Optimizer
+description: RMSProp maintains a running average of squared gradients to normalise the learning rate.
+initial_width: 260
+config:
+  - name: lr
+    type: float
+    description: "Learning rate (default: 0.01)"
+  - name: alpha
+    type: float
+    description: "Smoothing constant (default: 0.99)"
+  - name: eps
+    type: float
+    description: "Numerical stability (default: 1e-8)"
+  - name: momentum
+    type: float
+    description: "Momentum factor (default: 0)"
+  - name: wd
+    type: float
+    description: "Weight decay (default: 0)"
+inputs:
+  - name: params
+    type: tensor
+    description: Current parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: params
+    type: tensor
+    description: Updated parameter vector

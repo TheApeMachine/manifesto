@@ -1,0 +1,35 @@
+kind: Operation
+category: tokenizer
+op: tokenizer.decode
+name: TokenizerDecode
+label: Decode Tokens
+description: Decodes token IDs into text using a tokenizer.json artifact from HuggingFace or a local path.
+initial_width: 320
+config:
+  - name: source
+    type: string
+    description: "HuggingFace repo (\"org/name\"), hf:// locator, or local directory"
+    required: true
+  - name: file
+    type: string
+    description: "Tokenizer file within the repo or directory (default: \"tokenizer.json\")"
+  - name: cache
+    type: string
+    description: "Local Hub cache directory (default: hub.cache_dir)"
+  - name: revision
+    type: string
+    description: "Git branch, tag, PR ref, or full commit hash (default: \"main\")"
+  - name: repo_type
+    type: string
+    description: "Hub repository type: model, dataset, or space (default: \"model\")"
+  - name: skip_special_tokens
+    type: bool
+    description: "Omit special tokens from decoded text"
+inputs:
+  - name: tokens
+    type: tensor
+    description: Token IDs as float64 values
+outputs:
+  - name: out
+    type: scalar
+    description: Decoded UTF-8 byte length; decoded text is stored in graph state metadata

@@ -1,0 +1,18 @@
+kind: Operation
+category: bench
+op: bench.metric.perplexity
+name: Perplexity
+label: Perplexity
+description: Accumulates per-sample cross-entropy and emits exp(mean CE) — standard language model evaluation metric.
+initial_width: 240
+inputs:
+  - name: probs
+    type: tensor
+    description: Predicted token probabilities
+  - name: targets
+    type: tensor
+    description: One-hot target tokens
+outputs:
+  - name: perplexity
+    type: scalar
+    description: Running perplexity

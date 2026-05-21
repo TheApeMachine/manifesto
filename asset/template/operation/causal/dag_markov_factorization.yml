@@ -1,0 +1,18 @@
+kind: Operation
+category: causal
+op: causal.dag_markov_factorization
+name: DAG Markov Factorization
+label: DAG Markov Factorization
+description: Computes log probabilities under DAG Markov factorization.
+initial_width: 180
+inputs:
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: adj
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: log_prob
+    type: tensor
+    description: Output tensor

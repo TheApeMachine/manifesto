@@ -1,0 +1,21 @@
+kind: Operation
+category: attention
+op: attention.gqa
+name: GQA
+label: Grouped-Query Attention
+description: Grouped-query attention — fewer KV heads than query heads (LLaMA 2 style).
+initial_width: 280
+inputs:
+  - name: q
+    type: tensor
+    description: Query — [batch, num_q_heads, seq_len, head_dim]
+  - name: k
+    type: tensor
+    description: Key — [batch, num_kv_heads, seq_len, head_dim]
+  - name: v
+    type: tensor
+    description: Value — [batch, num_kv_heads, seq_len, head_dim]
+outputs:
+  - name: out
+    type: tensor
+    description: Attention output — [batch, num_q_heads, seq_len, head_dim]

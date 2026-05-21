@@ -1,0 +1,18 @@
+kind: Operation
+category: vsa
+op: vsa.bundle
+name: VSA Bundle
+label: VSA Bundle
+description: Bundles two hypervectors.
+initial_width: 180
+inputs:
+  - name: a
+    type: tensor
+    description: Input tensor
+  - name: b
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: bundled
+    type: tensor
+    description: Output tensor

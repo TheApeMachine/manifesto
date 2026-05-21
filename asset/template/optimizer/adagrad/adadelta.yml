@@ -1,0 +1,28 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.adadelta
+name: AdaDelta
+label: AdaDelta
+description: Eliminates the global learning rate — adapts based on a window of gradient updates.
+initial_width: 210
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated parameter vector
+config:
+  - name: rho
+    type: float
+    default: 0.9
+  - name: eps
+    type: float
+    default: 1e-6
+  - name: wd
+    type: float
+    default: 0.0

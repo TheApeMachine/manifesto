@@ -1,0 +1,43 @@
+kind: Block
+category: active_inference
+op: block.active_inference.agent
+name: Active Inference Agent
+label: Active Inference Agent
+description: A complete active inference step (free energy, belief update, expected free energy).
+initial_width: 260
+inputs:
+  - name: q
+    type: tensor
+    description: Input tensor
+  - name: p
+    type: tensor
+    description: Input tensor
+  - name: obs
+    type: tensor
+    description: Input tensor
+  - name: p_o_s
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_beliefs
+    type: tensor
+    description: Output tensor
+  - name: efe
+    type: tensor
+    description: Output tensor
+
+system:
+  topology:
+    nodes:
+      - id: calc_fe
+        op: active_inference.free_energy
+        in: [q, p, obs]
+        out: [fe]
+      - id: update_b
+        op: active_inference.belief_update
+        in: [q, fe]
+        out: [new_beliefs]
+      - id: calc_efe
+        op: active_inference.expected_free_energy
+        in: [new_beliefs, p_o_s]
+        out: [efe]

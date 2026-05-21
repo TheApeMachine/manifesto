@@ -1,0 +1,100 @@
+kind: program
+name: diffusion
+category: runtime
+
+include:
+  flux2klein: model.diffusion.flux-2-klein-4b
+
+state:
+  - name: latents
+    type: tensor
+    shape: [1, 4096, 128]
+    init: gaussian
+    seed: 0
+  - name: step_index
+    type: counter
+
+schedulers:
+  scheduler:
+    type: flow_match_euler_discrete
+    config:
+      steps: flux2klein.system.runtime.scheduler.num_inference_steps
+      num_train_timesteps: 1000
+      shift: 3.0
+      use_dynamic_shifting: true
+      time_shift_type: exponential
+      image_seq_len: 4096
+
+main:
+  - in: prompt
+    op: tokenizer.encode
+    config:
+      tokenizer: flux2klein.system.runtime.tokenizer.source
+      tokenizer_file: flux2klein.system.runtime.tokenizer.file
+      apply_chat_template: true
+      max_length: 512
+      pad_token_id: 151643
+    out: input_ids
+
+  - in:
+      input_ids: input_ids
+    op: graph.call
+    graph: flux2klein.text_encoder
+    out:
+      prompt_embeds: prompt_embeds
+
+  - op: scheduler.timesteps
+    config:
+      scheduler: scheduler
+    out: timesteps
+
+  - op: control.loop_each
+    source: timesteps
+    as: timestep
+    steps:
+      - in:
+          hidden_states: state.latents
+          encoder_hidden_states: prompt_embeds
+          timestep: timestep
+        op: graph.call
+        graph: flux2klein
+        out:
+          sample: velocity
+
+      - in:
+          timestep: timestep
+        op: scheduler.delta
+        config:
+          scheduler: scheduler
+        out: delta
+
+      - in:
+          y: state.latents
+          x: velocity
+          alpha: delta
+        op: math.axpy
+        out:
+          y: state.latents
+
+      - op: state.update
+        config:
+          update: increment
+          target: state.step_index
+
+  - in:
+      latents: state.latents
+    op: graph.call
+    graph: flux2klein.vae
+    out:
+      image: image
+
+  - in:
+      image: image
+    op: io.write_image
+    config:
+      path: flux2klein.system.runtime.generation.output
+      width: flux2klein.system.runtime.generation.width
+      height: flux2klein.system.runtime.generation.height
+      channels: 3
+      layout: channel_planar
+      range: neg_one_one

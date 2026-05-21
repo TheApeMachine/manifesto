@@ -1,0 +1,31 @@
+kind: Operation
+category: train
+op: train.optimizer.lbfgs
+name: L-BFGS
+label: L-BFGS Optimizer
+description: Limited-memory BFGS quasi-Newton optimizer.
+initial_width: 260
+config:
+  - name: lr
+    type: float
+    description: "Learning rate (default: 1.0)"
+  - name: hist_size
+    type: int
+    description: "Curvature history size (default: 10)"
+  - name: line_search
+    type: bool
+    description: "Enable Armijo line search (default: false)"
+  - name: c1
+    type: float
+    description: "Armijo coefficient (default: 1e-4)"
+inputs:
+  - name: params
+    type: tensor
+    description: Current parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: params
+    type: tensor
+    description: Updated parameter vector

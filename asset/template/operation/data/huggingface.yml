@@ -1,0 +1,29 @@
+kind: Operation
+category: data
+op: data.huggingface
+name: HuggingFace
+label: HuggingFace Dataset
+description: Streams rows from a HuggingFace dataset via the Datasets Server REST API. Each Forward call returns the next page of values for the configured field.
+initial_width: 300
+config:
+  - name: dataset
+    type: string
+    description: "Dataset identifier, e.g. \"glue\""
+    required: true
+  - name: config
+    type: string
+    description: "Dataset config name, e.g. \"sst2\" (default: \"default\")"
+  - name: split
+    type: string
+    description: "Dataset split: train, validation, test (default: \"train\")"
+  - name: field
+    type: string
+    description: "Row field to extract as float64 (default: \"label\")"
+  - name: page
+    type: int
+    description: "Rows per call (default: 100)"
+inputs: []
+outputs:
+  - name: out
+    type: tensor
+    description: Flat float64 slice of field values for this page

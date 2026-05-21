@@ -1,0 +1,36 @@
+kind: Operation
+category: model
+op: model.lora
+name: ModelLoRA
+label: LoRA
+description: >
+  Overlays low-rank adaptation matrices (W' = W + B·A * alpha/rank) on
+  targeted weight matrices. Easy mode: pick a preset (qv targets Q and V
+  projections; full targets all attention and MLP projections). Hard mode:
+  supply explicit glob patterns under targets for precise control.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "Source key — must match the model.load node's source"
+    required: true
+  - name: preset
+    type: string
+    description: "Easy mode — qv (Q+V projections, default) | full (all attn+MLP)"
+  - name: targets
+    type: list
+    description: "Hard mode — list of glob patterns overriding preset, e.g. [\"**.attn.q**\", \"**.mlp.gate**\"]"
+  - name: rank
+    type: int
+    description: "LoRA rank r (default: 8)"
+  - name: alpha
+    type: float
+    description: "LoRA scaling alpha (default: rank * 2)"
+inputs:
+  - name: trigger
+    type: scalar
+    description: Trigger from model.load or surgery
+outputs:
+  - name: out
+    type: scalar
+    description: Number of weight matrices adapted

@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.sin
+name: Sin
+label: Sin
+description: Elementwise sin(x). Cephes-style range reduction + minimax polynomial, vectorized across AVX2/SSE2/NEON on CPU and the GPU sin unit on Metal.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor (elementwise)
+outputs:
+  - name: y
+    type: tensor
+    description: sin(x) elementwise, same shape as input

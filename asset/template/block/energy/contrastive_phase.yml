@@ -1,0 +1,40 @@
+kind: Block
+category: energy
+op: block.energy.contrastive_phase
+name: Contrastive Phase
+label: Contrastive Phase
+description: Computes the per-sample positive and negative phase energy delta.
+initial_width: 260
+inputs:
+  - name: positive_energy
+    type: tensor
+    description: Energy values for data samples
+  - name: negative_energy
+    type: tensor
+    description: Energy values for model samples
+  - name: positive_scale
+    type: tensor
+    description: Scale applied to positive energy values
+  - name: negative_scale
+    type: tensor
+    description: Scale applied to negative energy values
+outputs:
+  - name: phase_delta
+    type: tensor
+    description: Per-sample contrastive phase delta
+
+system:
+  topology:
+    nodes:
+      - id: positive_phase_scale
+        op: math.mul
+        in: [positive_energy, positive_scale]
+        out: [positive_phase]
+      - id: negative_phase_scale
+        op: math.mul
+        in: [negative_energy, negative_scale]
+        out: [negative_phase]
+      - id: phase_delta_sum
+        op: math.add
+        in: [positive_phase, negative_phase]
+        out: [phase_delta]

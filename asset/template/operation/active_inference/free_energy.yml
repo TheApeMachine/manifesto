@@ -1,0 +1,21 @@
+kind: Operation
+category: active_inference
+op: active_inference.free_energy
+name: Free Energy
+label: Free Energy
+description: Computes variational free energy.
+initial_width: 180
+inputs:
+  - name: q
+    type: tensor
+    description: Input tensor
+  - name: p
+    type: tensor
+    description: Input tensor
+  - name: obs
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: fe
+    type: tensor
+    description: Output tensor

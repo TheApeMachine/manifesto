@@ -1,0 +1,36 @@
+kind: Operation
+category: model
+op: model.graft
+name: ModelGraft
+label: Layer Graft
+description: >
+  Tap point on a named layer. In read mode, emits the layer's weights as a
+  tensor. In read_write mode, also accepts an injection vector that is added
+  back into the weights before storing — enabling activation steering,
+  representation editing, and mechanistic interpretability probes exactly
+  as described in the LARQL model: the model IS the database, and a graft
+  is a live query+patch against it.
+initial_width: 320
+config:
+  - name: source
+    type: string
+    description: "Source key — must match the model.load node's source"
+    required: true
+  - name: at
+    type: string
+    description: "Dot-path or glob pattern of the layer to tap (e.g. transformer.h.12 or transformer.h.*.attn.v)"
+    required: true
+  - name: mode
+    type: string
+    description: "read (default) | read_write"
+inputs:
+  - name: trigger
+    type: scalar
+    description: Trigger from model.load or surgery
+  - name: injection
+    type: tensor
+    description: "(read_write only) Vector to add into the tapped layer — steering vector, probe output, etc."
+outputs:
+  - name: activation
+    type: tensor
+    description: The tapped (and optionally patched) layer weights

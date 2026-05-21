@@ -1,0 +1,18 @@
+kind: Operation
+category: train
+op: train.loss.cross_entropy
+name: CrossEntropyLoss
+label: Cross-Entropy Loss
+description: Softmax cross-entropy between logits and one-hot targets. Returns a single-element scalar loss.
+initial_width: 260
+inputs:
+  - name: logits
+    type: tensor
+    description: Raw model logits
+  - name: targets
+    type: tensor
+    description: One-hot target distribution
+outputs:
+  - name: loss
+    type: scalar
+    description: Scalar cross-entropy loss

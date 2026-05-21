@@ -175,7 +175,7 @@ func (store *StateStore) Update(update string, target string) error {
 }
 
 /*
-LatentNorm returns the L2 norm of a float32 latent buffer (for scheduler steps).
+LatentNorm returns the L2 norm of a float32 latent buffer.
 */
 func LatentNorm(values []float32) float64 {
 	sum := 0.0

@@ -1,0 +1,31 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.lion
+name: Lion
+label: Lion
+description: EvoLved Sign Momentum (Chen et al. 2023) — memory-efficient, uses sign of update only.
+initial_width: 200
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated parameter vector
+config:
+  - name: lr
+    type: float
+    default: 0.0001
+  - name: beta1
+    type: float
+    default: 0.9
+  - name: beta2
+    type: float
+    default: 0.99
+  - name: wd
+    type: float
+    default: 0.0

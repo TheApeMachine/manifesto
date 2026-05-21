@@ -1,0 +1,40 @@
+kind: Operation
+category: physics.quantum_hydro
+op: stencil.laplacian
+name: Laplacian Stencil
+label: Laplacian
+description: |
+  Discrete Laplacian on a uniform rank-1/2/3 grid via 2nd-order central
+  differences with periodic boundary conditions. Output shape matches input.
+  For input rank R, the operation interprets all R dimensions as spatial
+  (no batch / channel axes in v1). Spacing is uniform across dimensions.
+
+  Mathematical form (per axis, periodic wrap):
+    (laplacian u)[i] = (u[i-1] - 2 u[i] + u[i+1]) / spacing^2
+
+  Used as the spatial operator for quantum hydrodynamics (Madelung quantum
+  potential), diffusion / Fokker-Planck, wave equations, and reaction-
+  diffusion experiments. Composes cleanly with math.mul, math.add, math.div
+  to build first-class PDE updates as template blocks.
+initial_width: 260
+inputs:
+  - name: u
+    type: tensor
+    description: Scalar field sampled on a uniform 1D / 2D / 3D grid.
+outputs:
+  - name: laplacian_u
+    type: tensor
+    description: Discrete Laplacian, same shape as input.
+config:
+  - name: spacing
+    type: float
+    default: 1.0
+    description: Uniform grid spacing h. Output is divided by h*h.
+  - name: boundary
+    type: string
+    default: periodic
+    description: Boundary condition. v1 supports "periodic" only.
+  - name: order
+    type: int
+    default: 2
+    description: Stencil order. v1 supports order 2 only.

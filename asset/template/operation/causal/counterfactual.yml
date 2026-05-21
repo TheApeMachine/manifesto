@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.counterfactual
+name: Counterfactual
+label: Counterfactual
+description: Computes counterfactual outcomes.
+initial_width: 180
+inputs:
+  - name: obs
+    type: tensor
+    description: Input tensor
+  - name: intervention
+    type: tensor
+    description: Input tensor
+  - name: model
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: cf_outcome
+    type: tensor
+    description: Output tensor

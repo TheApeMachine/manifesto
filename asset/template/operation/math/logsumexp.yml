@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.logsumexp
+name: LogSumExp
+label: LogSumExp
+description: Numerically stable log(sum(exp(x))) reduction.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Output tensor

@@ -1,0 +1,189 @@
+kind: Block
+category: model
+op: block.model.qwen_3_6_27b
+name: Qwen 3.6 27B
+label: Qwen 3.6 27B
+description: Alibaba's Qwen 3.6 27B Dense architecture.
+initial_width: 300
+inputs:
+  - name: input_ids
+    type: tensor
+    description: Input token IDs [batch
+              - seq_len
+outputs:
+  - name: logits
+    type: tensor
+    description: Output logits [batch
+              - seq_len
+              - vocab_size
+
+system:
+  topology:
+    nodes:
+      - id: embed_tokens
+        op: embedding.token
+        in:
+              - input_ids
+        out:
+              - h_0
+        config:
+          vocab_size: 152064
+          d_model: 5120
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_48
+        repeat: 48
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: 1e-06
+
+          - id: q_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - q_proj_${i}
+            config:
+              in_features: 5120
+              out_features: 5120
+
+          - id: k_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - k_proj_${i}
+            config:
+              in_features: 5120
+              out_features: 1024
+
+          - id: v_proj_${i}
+            op: projection.linear
+            in:
+              - norm1_${i}
+            out:
+              - v_proj_${i}
+            config:
+              in_features: 5120
+              out_features: 1024
+
+          - id: rope_q_${i}
+            op: positional.rope
+            in:
+              - q_proj_${i}
+            out:
+              - q_rope_${i}
+            config:
+              base: 1000000.0
+              head_dim: 128
+
+          - id: rope_k_${i}
+            op: positional.rope
+            in:
+              - k_proj_${i}
+            out:
+              - k_rope_${i}
+            config:
+              base: 1000000.0
+              head_dim: 128
+
+          - id: attn_${i}
+            op: attention.gqa
+            in:
+              - q_rope_${i}
+              - k_rope_${i}
+              - v_proj_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: 5120
+              out_features: 5120
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: 1e-06
+
+          - id: gate_up_proj_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - gate_up_proj_${i}
+            config:
+              in_features: 5120
+              out_features: 54784
+
+          - id: swiglu_${i}
+            op: activation.swiglu
+            in:
+              - gate_up_proj_${i}
+            out:
+              - swiglu_out_${i}
+
+          - id: down_proj_${i}
+            op: projection.linear
+            in:
+              - swiglu_out_${i}
+            out:
+              - down_proj_${i}
+            config:
+              in_features: 27392
+              out_features: 5120
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - down_proj_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.rmsnorm
+        in:
+              - h_48
+        out:
+              - final_norm
+        config:
+          eps: 1e-06
+
+      - id: lm_head
+        op: projection.linear
+        in:
+              - final_norm
+        out:
+              - logits
+        config:
+          in_features: 5120
+          out_features: 152064

@@ -1,0 +1,30 @@
+kind: Block
+category: energy
+op: block.energy.boltzmann_distribution
+name: Boltzmann Distribution
+label: Boltzmann
+description: Converts energies into normalized Boltzmann probabilities.
+initial_width: 260
+inputs:
+  - name: energy
+    type: tensor
+    description: Energy values E(x)
+  - name: negative_beta
+    type: tensor
+    description: Elementwise -beta scale matching energy shape
+outputs:
+  - name: probability
+    type: tensor
+    description: Normalized probabilities proportional to exp(-beta E)
+
+system:
+  topology:
+    nodes:
+      - id: energy_scale
+        op: math.mul
+        in: [energy, negative_beta]
+        out: [negative_beta_energy]
+      - id: energy_normalize
+        op: math.softmax
+        in: [negative_beta_energy]
+        out: [probability]

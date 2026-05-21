@@ -1,0 +1,45 @@
+kind: Block
+category: markov_blanket
+op: block.markov_blanket.flow
+name: Markov Blanket Flow
+label: MB Flow
+description: Computes flow for internal and active states.
+initial_width: 260
+inputs:
+  - name: x_sens
+    type: tensor
+    description: Sensory states
+  - name: x_int
+    type: tensor
+    description: Internal states
+  - name: W_int
+    type: tensor
+    description: Weights for internal
+  - name: bias_int
+    type: tensor
+    description: Bias for internal
+  - name: W_act
+    type: tensor
+    description: Weights for active
+  - name: bias_act
+    type: tensor
+    description: Bias for active
+outputs:
+  - name: flow_int
+    type: tensor
+    description: Internal flow
+  - name: flow_act
+    type: tensor
+    description: Active flow
+
+system:
+  topology:
+    nodes:
+      - id: calc_flow_int
+        op: markov_blanket.flow_internal
+        in: [x_sens, W_int, bias_int]
+        out: [flow_int]
+      - id: calc_flow_act
+        op: markov_blanket.flow_active
+        in: [x_int, W_act, bias_act]
+        out: [flow_act]

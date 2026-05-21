@@ -1,0 +1,30 @@
+kind: Block
+category: memory
+op: block.memory.hopfield_recall
+name: Hopfield Recall
+label: Hopfield Recall
+description: Classic discrete Hopfield recall — single synchronous update x_new = sign(W * x).
+initial_width: 240
+inputs:
+  - name: x
+    type: tensor
+    description: Query pattern [N]
+  - name: W
+    type: tensor
+    description: Hebbian weight matrix [N, N]
+outputs:
+  - name: x_new
+    type: tensor
+    description: Retrieved pattern [N]
+
+system:
+  topology:
+    nodes:
+      - id: hopfield_project
+        op: math.matmul
+        in: [W, x]
+        out: [Wx]
+      - id: hopfield_activate
+        op: math.sign
+        in: [Wx]
+        out: [x_new]

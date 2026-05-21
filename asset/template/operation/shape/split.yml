@@ -1,0 +1,22 @@
+kind: Operation
+category: shape
+op: shape.split
+name: Split
+label: Split
+description: Splits a tensor into chunks of equal size along one dimension.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: chunks
+    type: tensor
+    description: Concatenated split chunks (split externally by stride)
+config:
+  - name: split_size
+    type: int
+    description: Size of each chunk
+  - name: dim
+    type: int
+    description: Dimension to split along

@@ -1,0 +1,21 @@
+kind: Operation
+category: math
+op: math.axpy
+name: Axpy
+label: Axpy
+description: In-place fused multiply-add, y = y + alpha * x.
+initial_width: 180
+inputs:
+  - name: y
+    type: tensor
+    description: Tensor updated in-place
+  - name: x
+    type: tensor
+    description: Scaled tensor added to y
+  - name: alpha
+    type: scalar
+    description: Scale applied to x
+outputs:
+  - name: y
+    type: tensor
+    description: Updated y tensor

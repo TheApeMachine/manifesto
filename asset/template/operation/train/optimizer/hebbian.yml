@@ -1,0 +1,25 @@
+kind: Operation
+category: train
+op: train.optimizer.hebbian
+name: Hebbian
+label: Hebbian Optimizer
+description: Hebbian local update with optional max-norm rescaling.
+initial_width: 260
+config:
+  - name: lr
+    type: float
+    description: "Learning rate (default: 0.001)"
+  - name: max_norm
+    type: float
+    description: "Optional maximum output norm (default: 0)"
+inputs:
+  - name: params
+    type: tensor
+    description: Current parameter vector
+  - name: grads
+    type: tensor
+    description: Local update signal
+outputs:
+  - name: params
+    type: tensor
+    description: Updated parameter vector

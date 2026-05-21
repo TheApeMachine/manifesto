@@ -1,0 +1,15 @@
+kind: Operation
+category: scheduler
+op: scheduler.delta
+name: SchedulerDelta
+label: Scheduler Delta
+description: Resolves the latent update delta for a scheduler timestep.
+initial_width: 180
+inputs:
+  - name: timestep
+    type: scalar
+    description: Current scheduler timestep
+outputs:
+  - name: delta
+    type: scalar
+    description: Delta between the current and next scheduler sigma

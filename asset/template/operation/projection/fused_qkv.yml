@@ -1,0 +1,28 @@
+kind: Operation
+category: projection
+op: projection.fused_qkv
+name: Fused QKV
+label: Fused QKV
+description: Computes Q, K, V projections in a single fused matmul.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [M, d_in]
+outputs:
+  - name: qkv
+    type: tensor
+    description: Concatenated Q, K, V — [M, d_q + d_k + d_v]
+config:
+  - name: d_in
+    type: int
+    description: Input dimension
+  - name: d_q
+    type: int
+    description: Query dimension
+  - name: d_k
+    type: int
+    description: Key dimension
+  - name: d_v
+    type: int
+    description: Value dimension

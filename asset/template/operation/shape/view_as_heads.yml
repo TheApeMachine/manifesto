@@ -1,0 +1,19 @@
+kind: Operation
+category: shape
+op: shape.view_as_heads
+name: View As Heads
+label: View As Heads
+description: Reshapes [batch, seq, d_model] into [batch, num_heads, seq, head_dim] for multi-head attention.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [batch, seq_len, d_model]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [batch, num_heads, seq_len, head_dim]
+config:
+  - name: num_heads
+    type: int
+    description: Number of attention heads

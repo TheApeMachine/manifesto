@@ -1,0 +1,29 @@
+kind: Operation
+category: shape
+op: shape.slice
+name: Slice
+label: Slice
+description: |
+  Extracts a contiguous [start:end) range along one tensor dimension. Metal applySlice currently requires start==0 and leading-dim slicing. Non-prefix Metal slices fail with: metal tensor: slice node %q currently supports start=0 with leading-dim slicing only (got start=%d, dim=%d, outer=%d). Supported on Metal: shape [1, 4112, 64] with config { dim: 1, start: 0, end: 4096 }. Unsupported on Metal: { dim: 1, start: 64, end: 128 } or a slice where dim>0 and preceding dimensions make outer>1. Run non-prefix slices on CPU or avoid them until Metal strided-copy support is implemented.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Sliced tensor
+config:
+  - name: dim
+    type: int
+    default: 0
+    description: Axis to slice along
+  - name: start
+    type: int
+    default: 0
+    description: Inclusive start index along dim
+  - name: end
+    type: int
+    default: 0
+    description: Exclusive end index along dim; zero means the full dim size

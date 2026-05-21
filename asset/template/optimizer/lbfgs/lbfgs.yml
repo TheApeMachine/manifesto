@@ -1,0 +1,30 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.lbfgs
+name: L-BFGS
+label: L-BFGS
+description: Limited-memory BFGS — quasi-Newton method, ideal for small-batch or full-batch settings.
+initial_width: 220
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated parameter vector
+config:
+  - name: lr
+    type: float
+    default: 1.0
+  - name: hist_size
+    type: int
+    default: 10
+    description: Number of curvature pairs to store
+  - name: line_search
+    type: bool
+    default: true
+    description: Enable Armijo line search

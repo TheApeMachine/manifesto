@@ -1,0 +1,41 @@
+kind: Operation
+category: pooling
+op: pooling.max_pool2d
+name: Max Pool 2D
+label: Max Pool 2D
+description: Max pooling over 2-D spatial windows.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [N, C, H, W]
+outputs:
+  - name: y
+    type: tensor
+    description: Pooled output [N, C, H_out, W_out]
+config:
+  - name: kernel_h
+    type: int
+  - name: kernel_w
+    type: int
+  - name: stride_h
+    type: int
+    default: 1
+  - name: stride_w
+    type: int
+    default: 1
+  - name: pad_h
+    type: int
+    default: 0
+  - name: pad_w
+    type: int
+    default: 0
+  - name: dil_h
+    type: int
+    default: 1
+  - name: dil_w
+    type: int
+    default: 1
+  - name: ceil
+    type: bool
+    default: false

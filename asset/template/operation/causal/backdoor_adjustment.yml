@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.backdoor_adjustment
+name: Backdoor Adjustment
+label: Backdoor Adjustment
+description: Computes causal effect via backdoor adjustment.
+initial_width: 180
+inputs:
+  - name: Y
+    type: tensor
+    description: Input tensor
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: Z
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: effect
+    type: tensor
+    description: Output tensor

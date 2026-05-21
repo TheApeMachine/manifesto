@@ -1,0 +1,22 @@
+kind: Operation
+category: train
+op: train.checkpoint.save
+name: CheckpointSave
+label: Save Checkpoint
+description: Persists the incoming parameter vector to disk. Passes params through unchanged so it can sit inline in the training graph.
+initial_width: 260
+config:
+  - name: dir
+    type: string
+    description: "Directory to write into (default: \"checkpoints\")"
+  - name: prefix
+    type: string
+    description: "Filename prefix (default: \"ckpt\")"
+inputs:
+  - name: params
+    type: tensor
+    description: Parameter vector to save
+outputs:
+  - name: params
+    type: tensor
+    description: Passthrough of input params

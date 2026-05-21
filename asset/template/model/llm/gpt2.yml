@@ -1,0 +1,250 @@
+kind: Block
+category: model
+op: block.model.gpt2
+name: GPT-2
+label: GPT-2
+description: OpenAI GPT-2 decoder-only transformer architecture.
+initial_width: 300
+inputs:
+  - name: input_ids
+    type: tensor
+    description: Input token IDs [batch, seq_len]
+outputs:
+  - name: logits
+    type: tensor
+    description: Output logits [batch, seq_len, vocab_size]
+
+system:
+  runtime:
+    type: model
+    backend: auto
+    model:
+      source: openai-community/gpt2
+      repo_type: model
+    tokenizer:
+      source: openai-community/gpt2
+      repo_type: model
+    generation:
+      max_new_tokens: 128
+      repetition_penalty: 1.1
+      temperature: 0.8
+      top_k: 50
+      top_p: 0.95
+      seed: 0
+      stop_tokens: []
+      stop_special_tokens: true
+
+  topology:
+    inputs:
+      - input_ids
+      - position_ids
+    nodes:
+      - id: token_embedding
+        op: embedding.token
+        in:
+          - input_ids
+        out:
+          - h_0
+        config:
+          vocab_size: 50257
+          d_model: 768
+
+      - id: position_embedding
+        op: embedding.token
+        in:
+          - position_ids
+        out:
+          - p_0
+        config:
+          vocab_size: 1024
+          d_model: 768
+
+      - id: embedding_add
+        op: math.add
+        in:
+          - h_0
+          - p_0
+        out:
+          - hidden_0
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - hidden_0
+        out:
+          - hidden_12
+        repeat: 12
+        index: layer
+        template:
+          - id: ln_1_${layer}
+            op: math.layernorm
+            in:
+              - hidden_${layer}
+            out:
+              - ln_1_${layer}
+            config:
+              eps: 1e-05
+
+          - id: q_proj_${layer}
+            op: projection.linear
+            in:
+              - ln_1_${layer}
+            out:
+              - q_proj_${layer}
+            config:
+              in_features: 768
+              out_features: 768
+
+          - id: k_proj_${layer}
+            op: projection.linear
+            in:
+              - ln_1_${layer}
+            out:
+              - k_proj_${layer}
+            config:
+              in_features: 768
+              out_features: 768
+
+          - id: v_proj_${layer}
+            op: projection.linear
+            in:
+              - ln_1_${layer}
+            out:
+              - v_proj_${layer}
+            config:
+              in_features: 768
+              out_features: 768
+
+          - id: q_heads_${layer}
+            op: shape.view_as_heads
+            in:
+              - q_proj_${layer}
+            out:
+              - q_heads_${layer}
+            config:
+              num_heads: 12
+
+          - id: k_heads_${layer}
+            op: shape.view_as_heads
+            in:
+              - k_proj_${layer}
+            out:
+              - k_heads_${layer}
+            config:
+              num_heads: 12
+
+          - id: v_heads_${layer}
+            op: shape.view_as_heads
+            in:
+              - v_proj_${layer}
+            out:
+              - v_heads_${layer}
+            config:
+              num_heads: 12
+
+          - id: causal_attention_${layer}
+            op: attention.sdpa
+            in:
+              - q_heads_${layer}
+              - k_heads_${layer}
+              - v_heads_${layer}
+            out:
+              - attention_heads_${layer}
+            config:
+              num_heads: 12
+              causal: true
+
+          - id: merge_attention_${layer}
+            op: shape.merge_heads
+            in:
+              - attention_heads_${layer}
+            out:
+              - attention_${layer}
+
+          - id: attention_projection_${layer}
+            op: projection.linear
+            in:
+              - attention_${layer}
+            out:
+              - attention_out_${layer}
+            config:
+              in_features: 768
+              out_features: 768
+
+          - id: attention_residual_${layer}
+            op: math.add
+            in:
+              - hidden_${layer}
+              - attention_out_${layer}
+            out:
+              - residual_${layer}
+
+          - id: ln_2_${layer}
+            op: math.layernorm
+            in:
+              - residual_${layer}
+            out:
+              - ln_2_${layer}
+            config:
+              eps: 1e-05
+
+          - id: mlp_fc_${layer}
+            op: projection.linear
+            in:
+              - ln_2_${layer}
+            out:
+              - mlp_fc_${layer}
+            config:
+              in_features: 768
+              out_features: 3072
+
+          - id: mlp_gelu_${layer}
+            op: activation.gelu
+            in:
+              - mlp_fc_${layer}
+            out:
+              - mlp_gelu_${layer}
+
+          - id: mlp_projection_${layer}
+            op: projection.linear
+            in:
+              - mlp_gelu_${layer}
+            out:
+              - mlp_out_${layer}
+            config:
+              in_features: 3072
+              out_features: 768
+
+          - id: mlp_residual_${layer}
+            op: math.add
+            in:
+              - residual_${layer}
+              - mlp_out_${layer}
+            out:
+              - hidden_${next_layer}
+
+      - id: final_norm
+        op: math.layernorm
+        in:
+          - hidden_12
+        out:
+          - final_hidden
+        config:
+          eps: 1e-05
+
+      - id: final_token
+        op: shape.last_token
+        in:
+          - final_hidden
+        out:
+          - final_token
+
+      - id: lm_head
+        op: projection.linear
+        in:
+          - final_token
+        out:
+          - logits
+        config:
+          in_features: 768
+          out_features: 50257

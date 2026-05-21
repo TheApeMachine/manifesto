@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.cate
+name: CATE
+label: CATE
+description: Computes Conditional Average Treatment Effect.
+initial_width: 180
+inputs:
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: treatment
+    type: tensor
+    description: Input tensor
+  - name: Y
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: cate
+    type: tensor
+    description: Output tensor

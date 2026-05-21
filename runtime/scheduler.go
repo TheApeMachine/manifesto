@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -141,32 +140,14 @@ func (scheduler *FlowMatchEulerDiscrete) timeShift(mu float64, sigma float64) fl
 	return expMu / (expMu + (1/sigma - 1))
 }
 
-/*
-Step applies one Euler update to latent values.
-*/
-func (scheduler *FlowMatchEulerDiscrete) Step(
-	latents []float32,
-	velocity []float32,
-	timestep float32,
-) ([]float32, error) {
-	if len(latents) != len(velocity) {
-		return nil, fmt.Errorf("scheduler step: latents/velocity length mismatch")
-	}
-
+func (scheduler *FlowMatchEulerDiscrete) Delta(timestep float32) float32 {
 	if len(scheduler.sigmas) != scheduler.Steps+1 {
 		scheduler.Timesteps()
 	}
 
 	sigmaIndex := scheduler.sigmaIndex(timestep)
-	delta := scheduler.sigmas[sigmaIndex+1] - scheduler.sigmas[sigmaIndex]
 
-	updated := make([]float32, len(latents))
-
-	for index := range latents {
-		updated[index] = latents[index] + delta*velocity[index]
-	}
-
-	return updated, nil
+	return scheduler.sigmas[sigmaIndex+1] - scheduler.sigmas[sigmaIndex]
 }
 
 func (scheduler *FlowMatchEulerDiscrete) sigmaIndex(timestep float32) int {

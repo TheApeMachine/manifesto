@@ -1,0 +1,15 @@
+kind: Operation
+category: activation
+op: activation.sigmoid
+name: Sigmoid
+label: Sigmoid
+description: Sigmoid squashing function, output in (0, 1).
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Activated output

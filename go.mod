@@ -2,7 +2,14 @@ module github.com/theapemachine/manifesto
 
 go 1.26.1
 
-require github.com/smartystreets/goconvey v1.8.1
+replace github.com/theapemachine/hf => ../hf
+
+replace github.com/theapemachine/manifesto => ../manifesto
+
+require (
+	github.com/smartystreets/goconvey v1.8.1
+	github.com/theapemachine/hf v0.0.1
+)
 
 require (
 	github.com/gopherjs/gopherjs v1.17.2 // indirect

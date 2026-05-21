@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.frontdoor_adjustment
+name: Frontdoor Adjustment
+label: Frontdoor Adjustment
+description: Computes causal effect via frontdoor adjustment.
+initial_width: 180
+inputs:
+  - name: Y
+    type: tensor
+    description: Input tensor
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: M
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: effect
+    type: tensor
+    description: Output tensor

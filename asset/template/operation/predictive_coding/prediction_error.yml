@@ -1,0 +1,18 @@
+kind: Operation
+category: predictive_coding
+op: predictive_coding.prediction_error
+name: PC Prediction Error
+label: PC Prediction Error
+description: Computes prediction errors.
+initial_width: 180
+inputs:
+  - name: target
+    type: tensor
+    description: Input tensor
+  - name: pred
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: error
+    type: tensor
+    description: Output tensor

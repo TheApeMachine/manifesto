@@ -1,0 +1,20 @@
+kind: Operation
+category: math
+op: math.layernorm
+name: LayerNorm
+label: Layer Norm
+description: Normalizes over the last dimension with learnable gamma and beta.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Normalized output
+config:
+  - name: eps
+    type: float
+    default: 1e-5
+    description: Numerical stability epsilon

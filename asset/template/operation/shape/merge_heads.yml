@@ -1,0 +1,15 @@
+kind: Operation
+category: shape
+op: shape.merge_heads
+name: Merge Heads
+label: Merge Heads
+description: Reshapes [batch, num_heads, seq, head_dim] back into [batch, seq, d_model].
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [batch, num_heads, seq_len, head_dim]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [batch, seq_len, d_model]

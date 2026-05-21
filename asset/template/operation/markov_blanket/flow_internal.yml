@@ -1,0 +1,21 @@
+kind: Operation
+category: markov_blanket
+op: markov_blanket.flow_internal
+name: MB Flow Internal
+label: MB Flow Internal
+description: Computes flow to internal states.
+initial_width: 180
+inputs:
+  - name: x_sens
+    type: tensor
+    description: Input tensor
+  - name: W
+    type: tensor
+    description: Input tensor
+  - name: bias
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: flow
+    type: tensor
+    description: Output tensor

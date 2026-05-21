@@ -1,0 +1,15 @@
+kind: Operation
+category: activation
+op: activation.gelu
+name: GELU
+label: GELU
+description: Gaussian Error Linear Unit activation.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Activated output

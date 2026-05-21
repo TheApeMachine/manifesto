@@ -1,0 +1,51 @@
+kind: Operation
+category: convolution
+op: convolution.conv_transpose2d
+name: ConvTranspose2d
+label: Conv Transpose 2D
+description: Transposed 2-D convolution (deconvolution) for upsampling.
+initial_width: 240
+inputs:
+  - name: x
+    type: tensor
+    description: Input [N, in_channels, H, W]
+outputs:
+  - name: y
+    type: tensor
+    description: Upsampled output [N, out_channels, H_out, W_out]
+config:
+  - name: in_channels
+    type: int
+  - name: out_channels
+    type: int
+  - name: kernel_h
+    type: int
+  - name: kernel_w
+    type: int
+  - name: stride_h
+    type: int
+    default: 1
+  - name: stride_w
+    type: int
+    default: 1
+  - name: pad_h
+    type: int
+    default: 0
+  - name: pad_w
+    type: int
+    default: 0
+  - name: out_pad_h
+    type: int
+    default: 0
+  - name: out_pad_w
+    type: int
+    default: 0
+  - name: dil_h
+    type: int
+    default: 1
+  - name: dil_w
+    type: int
+    default: 1
+  - name: groups
+    type: int
+    default: 1

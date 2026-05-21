@@ -1,0 +1,15 @@
+kind: Operation
+category: math
+op: math.sign
+name: Sign
+label: Sign
+description: Elementwise sign function — returns -1, 0, or +1.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: sign_x
+    type: tensor
+    description: Elementwise sign of x

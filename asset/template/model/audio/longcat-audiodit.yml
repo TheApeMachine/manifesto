@@ -1,0 +1,159 @@
+kind: Block
+category: model
+op: block.model.audio_longcat_audiodit
+name: LongCat AudioDiT 3.5B
+label: LongCat AudioDiT 3.5B
+description: LongCat AudioDiT (Diffusion Transformer for TTS in waveform latent space).
+initial_width: 300
+inputs:
+  - name: hidden_states
+    type: tensor
+    description: Input latents [batch
+              - seq_len
+              - d_model
+  - name: encoder_hidden_states
+    type: tensor
+    description: Context embeddings [batch
+              - context_len
+              - context_dim
+  - name: timestep
+    type: tensor
+    description: Timestep embedding [batch
+              - pooled_dim
+outputs:
+  - name: sample
+    type: tensor
+    description: Output denoised latents [batch
+              - seq_len
+              - d_model
+
+system:
+  topology:
+    nodes:
+      - id: x_embed
+        op: projection.linear
+        in:
+              - hidden_states
+        out:
+              - h_0
+        config:
+          in_features: 2048
+          out_features: 2048
+
+      - id: transformer_layers
+        op: control.repeat
+        in:
+          - h_0
+        out:
+          - h_32
+        repeat: 32
+        index: i
+        template:
+          - id: input_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_${i}
+            out:
+              - norm1_${i}
+            config:
+              eps: 1e-05
+
+          - id: qkv_proj_${i}
+            op: projection.fused_qkv
+            in:
+              - norm1_${i}
+            out:
+              - qkv_${i}
+            config:
+              d_in: 2048
+              d_q: 2048
+              d_k: 2048
+              d_v: 2048
+
+          - id: attn_${i}
+            op: attention.sdpa
+            in:
+              - qkv_${i}
+            out:
+              - attn_out_${i}
+
+          - id: o_proj_${i}
+            op: projection.linear
+            in:
+              - attn_out_${i}
+            out:
+              - o_proj_${i}
+            config:
+              in_features: 2048
+              out_features: 2048
+
+          - id: add_1_${i}
+            op: math.add
+            in:
+              - h_${i}
+              - o_proj_${i}
+            out:
+              - h_mid_${i}
+
+          - id: post_attention_layernorm_${i}
+            op: math.rmsnorm
+            in:
+              - h_mid_${i}
+            out:
+              - norm2_${i}
+            config:
+              eps: 1e-05
+
+          - id: gate_up_proj_${i}
+            op: projection.linear
+            in:
+              - norm2_${i}
+            out:
+              - gate_up_proj_${i}
+            config:
+              in_features: 2048
+              out_features: 16384
+
+          - id: swiglu_${i}
+            op: activation.swiglu
+            in:
+              - gate_up_proj_${i}
+            out:
+              - swiglu_out_${i}
+
+          - id: down_proj_${i}
+            op: projection.linear
+            in:
+              - swiglu_out_${i}
+            out:
+              - down_proj_${i}
+            config:
+              in_features: 8192
+              out_features: 2048
+
+          - id: add_2_${i}
+            op: math.add
+            in:
+              - h_mid_${i}
+              - down_proj_${i}
+            out:
+              - h_${next_i}
+
+      - id: norm
+        op: math.rmsnorm
+        in:
+              - h_32
+        out:
+              - final_norm
+        config:
+          eps: 1e-05
+
+      - id: proj_out
+        op: projection.linear
+        in:
+              - final_norm
+        out:
+              - sample
+        config:
+          in_features: 2048
+          out_features: 2048

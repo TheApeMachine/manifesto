@@ -1,0 +1,18 @@
+kind: Operation
+category: active_inference
+op: active_inference.belief_update
+name: Belief Update
+label: Belief Update
+description: Updates beliefs using free energy gradients.
+initial_width: 180
+inputs:
+  - name: beliefs
+    type: tensor
+    description: Input tensor
+  - name: fe_grad
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: new_beliefs
+    type: tensor
+    description: Output tensor

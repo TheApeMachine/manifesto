@@ -2,7 +2,7 @@
 
 `github.com/theapemachine/manifesto` compiles Hugging Face model repositories and YAML runtime programs into manifest graph IR, compute IR, and bound weights.
 
-The root Go package is named **`manifest`** (`import "github.com/theapemachine/manifesto"`). It exposes `Compiler` as the single entry point; callers supply a recipe catalog and a Hugging Face Hub client.
+The **`compiler`** package (`import "github.com/theapemachine/manifesto/compiler"`) exposes `Compiler` as the compilation entry point; callers supply a recipe catalog and a Hugging Face Hub client.
 
 ## Compilation pipeline
 
@@ -39,18 +39,18 @@ Parsing a program manifest alone (no repo) stops after **parse** and returns `as
 import (
     "context"
 
-    manifest "github.com/theapemachine/manifesto"
+    "github.com/theapemachine/manifesto/compiler"
     "github.com/theapemachine/manifesto/catalog"
     "github.com/theapemachine/manifesto/resolve"
 )
 
-compiler, err := manifest.NewCompiler(manifest.Options{
+manifestCompiler, err := compiler.NewCompiler(compiler.Options{
     Catalog: catalog.NewFS(yourRecipeFS),
     Hub:     yourHubClient, // implements resolve.Hub
 })
 if err != nil { /* ... */ }
 
-out, err := compiler.Compile(ctx, manifest.CompileInput{
+out, err := manifestCompiler.Compile(ctx, compiler.CompileInput{
     ProgramYAML: programBytes,
     Repo: resolve.RepoLocation{
         RepoID:   "org/model",
@@ -65,9 +65,9 @@ out, err := compiler.Compile(ctx, manifest.CompileInput{
 
 ## Sub-packages
 
-### `manifest` (root)
+### [`compiler`](./compiler/)
 
-Orchestrates the pipeline above. Types: `Compiler`, `CompileInput`, `CompileOutput`.
+Orchestrates the pipeline above. Types: `Compiler`, `CompileInput`, `CompileOutput`. Include expansion and asset graph compilation live in `includes.go` and `assets.go`.
 
 ### [`ast`](./ast/)
 

@@ -1,0 +1,23 @@
+kind: Operation
+category: positional
+op: positional.rope
+name: RoPE
+label: Rotary Embeddings
+description: Rotary Position Embeddings — encodes position by rotating Q/K vectors.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [batch, num_heads, seq_len, head_dim]
+outputs:
+  - name: y
+    type: tensor
+    description: Position-encoded output (same shape)
+config:
+  - name: head_dim
+    type: int
+    description: Head dimension (must be even)
+  - name: base
+    type: float
+    default: 10000
+    description: Frequency base

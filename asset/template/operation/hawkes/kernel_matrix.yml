@@ -1,0 +1,15 @@
+kind: Operation
+category: hawkes
+op: hawkes.kernel_matrix
+name: Hawkes Kernel Matrix
+label: Hawkes Kernel Matrix
+description: Computes Hawkes kernel matrix.
+initial_width: 180
+inputs:
+  - name: times
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: kernel_mat
+    type: tensor
+    description: Output tensor

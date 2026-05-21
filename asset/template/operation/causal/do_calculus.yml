@@ -1,0 +1,21 @@
+kind: Operation
+category: causal
+op: causal.do_calculus
+name: Do Calculus
+label: Do Calculus
+description: Applies Pearl's do-calculus interventions.
+initial_width: 180
+inputs:
+  - name: cov
+    type: tensor
+    description: Input tensor
+  - name: mask
+    type: tensor
+    description: Input tensor
+  - name: values
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: adjusted
+    type: tensor
+    description: Output tensor

@@ -1,0 +1,113 @@
+kind: Block
+category: model
+op: block.model.diffusion_flux_2_klein_4b
+name: FLUX.2 Klein 4B
+label: FLUX.2 Klein 4B
+description: Black Forest Labs FLUX.2 Klein 4B rectified-flow transformer denoiser.
+initial_width: 320
+inputs:
+  - name: hidden_states
+    type: tensor
+    description: Latent tokens [batch, seq_len, 128].
+  - name: encoder_hidden_states
+    type: tensor
+    description: Text encoder states [batch, context_len, 7680].
+  - name: timestep
+    type: tensor
+    description: Diffusion timestep conditioning.
+outputs:
+  - name: sample
+    type: tensor
+    description: Predicted latent residual [batch, seq_len, 128].
+
+system:
+  runtime:
+    type: diffusion
+    backend: metal
+    model:
+      source: black-forest-labs/FLUX.2-klein-4B
+      repo_type: model
+      revision: main
+    tokenizer:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: tokenizer/tokenizer.json
+      repo_type: model
+      revision: main
+    text_encoder:
+      source: black-forest-labs/FLUX.2-klein-4B
+      path: text_encoder
+      manifest: model/diffusion/flux-2-klein-4b-text-encoder.yml
+      file: text_encoder/model.safetensors.index.json
+      architecture: Qwen3ForCausalLM
+      hidden_size: 2560
+      intermediate_size: 9728
+      num_hidden_layers: 36
+      num_attention_heads: 32
+      num_key_value_heads: 8
+      head_dim: 128
+      vocab_size: 151936
+      rope_theta: 1000000
+    transformer:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: transformer/diffusion_pytorch_model.safetensors
+      architecture: Flux2Transformer2DModel
+      in_channels: 128
+      hidden_size: 3072
+      joint_attention_dim: 7680
+      mlp_ratio: 3.0
+      num_layers: 5
+      num_single_layers: 20
+      num_attention_heads: 24
+      attention_head_dim: 128
+      axes_dims_rope: [32, 32, 32, 32]
+      rope_theta: 2000
+      eps: 1e-06
+      patch_size: 1
+      timestep_guidance_channels: 256
+      guidance_embeds: false
+    scheduler:
+      type: flow_match_euler_discrete
+      distilled: true
+      num_inference_steps: 4
+      guidance_scale: 1.0
+    vae:
+      source: black-forest-labs/FLUX.2-klein-4B
+      path: vae
+      manifest: model/diffusion/flux-2-klein-4b-vae-decoder.yml
+      file: vae/diffusion_pytorch_model.safetensors
+      architecture: AutoencoderKLFlux2
+    generation:
+      height: 1024
+      width: 1024
+      latent_channels: 128
+      latent_downsample: 16
+      patch_size: 1
+      max_sequence_length: 1024
+      seed: 1337
+      output: flux-2-klein-4b.png
+
+  # Topology is sourced from a parameterised architecture manifest so
+  # the same wiring can be reused for any FLUX-2-shaped checkpoint by
+  # changing the dimensions here. The included file lives at
+  # pkg/asset/template/model/architecture/flux2.yml and contains only
+  # primitive ops + repeat blocks — no Go-side architecture knowledge.
+  topology:
+    from_safetensors:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: transformer/diffusion_pytorch_model.safetensors
+      architecture: Flux2Transformer2DModel
+      config:
+        architectures: [Flux2Transformer2DModel]
+        in_channels: 128
+        hidden_size: 3072
+        joint_attention_dim: 7680
+        mlp_ratio: 3.0
+        num_layers: 5
+        num_single_layers: 20
+        num_attention_heads: 24
+        attention_head_dim: 128
+        rope_theta: 2000
+        eps: 1e-06
+      variables:
+        latent_seq_len: 4096
+        latent_side: 64

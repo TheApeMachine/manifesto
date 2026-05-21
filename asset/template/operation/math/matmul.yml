@@ -1,0 +1,18 @@
+kind: Operation
+category: math
+op: math.matmul
+name: MatMul
+label: Matrix Multiply
+description: Matrix multiplication A[M,K] × B[K,N] → C[M,N].
+initial_width: 200
+inputs:
+  - name: a
+    type: tensor
+    description: Left matrix [M, K]
+  - name: b
+    type: tensor
+    description: Right matrix [K, N]
+outputs:
+  - name: c
+    type: tensor
+    description: Result matrix [M, N]

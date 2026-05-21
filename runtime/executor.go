@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/tensor"
 )
 
 /*
@@ -28,6 +29,7 @@ type GraphCallRequest struct {
 	GraphName string
 	Graph     *ast.Graph
 	Compute   any
+	Plan      *ExecutionPlan
 	Inputs    map[string]any
 }
 
@@ -45,7 +47,9 @@ type Executor struct {
 	backend       Backend
 	host          HostOps
 	state         *StateStore
+	stateMemory   tensor.Backend
 	schedulers    map[string]*FlowMatchEulerDiscrete
+	plans         map[string]*ExecutionPlan
 	stdin         io.Reader
 	initialValues map[string]any
 }
@@ -57,7 +61,9 @@ type ExecutorOptions struct {
 	Backend       Backend
 	Host          HostOps
 	State         *StateStore
+	StateMemory   tensor.Backend
 	Schedulers    map[string]*FlowMatchEulerDiscrete
+	Plans         map[string]*ExecutionPlan
 	Stdin         io.Reader
 	InitialValues map[string]any
 }
@@ -70,7 +76,9 @@ func NewExecutor(options ExecutorOptions) *Executor {
 		backend:       options.Backend,
 		host:          options.Host,
 		state:         options.State,
+		stateMemory:   options.StateMemory,
 		schedulers:    options.Schedulers,
+		plans:         options.Plans,
 		stdin:         options.Stdin,
 		initialValues: options.InitialValues,
 	}
@@ -94,6 +102,8 @@ func (executor *Executor) Run(
 	for key, value := range executor.initialValues {
 		values[key] = value
 	}
+
+	defer closeRuntimeValues(values, executor.initialValues)
 
 	for _, step := range program.Steps {
 		if err := executor.runStep(ctx, step, graphs, compute, values); err != nil {
@@ -132,10 +142,12 @@ func (executor *Executor) runStep(
 		return executor.runAssign(step, values)
 	case "value.append":
 		return executor.runAppend(step, values)
+	case "math.axpy":
+		return executor.runAxpy(ctx, step, values)
 	case "scheduler.timesteps":
 		return executor.runSchedulerTimesteps(ctx, step, values)
-	case "scheduler.step":
-		return executor.runSchedulerStep(ctx, step, values)
+	case "scheduler.delta":
+		return executor.runSchedulerDelta(ctx, step, values)
 	case "state.update":
 		return executor.runStateUpdate(ctx, step)
 	case "control.loop_each":
@@ -384,6 +396,75 @@ func (executor *Executor) runAssign(step ast.Step, values map[string]any) error 
 	return nil
 }
 
+func (executor *Executor) runAxpy(
+	ctx context.Context,
+	step ast.Step,
+	values map[string]any,
+) error {
+	_ = ctx
+
+	yRef, ok := step.In["y"]
+
+	if !ok {
+		return fmt.Errorf("math.axpy: y input is required")
+	}
+
+	xRef, ok := step.In["x"]
+
+	if !ok {
+		return fmt.Errorf("math.axpy: x input is required")
+	}
+
+	alphaRef, ok := step.In["alpha"]
+
+	if !ok {
+		return fmt.Errorf("math.axpy: alpha input is required")
+	}
+
+	yValue, err := executor.resolveValue(yRef, values)
+
+	if err != nil {
+		return err
+	}
+
+	xValue, err := executor.resolveValue(xRef, values)
+
+	if err != nil {
+		return err
+	}
+
+	alphaValue, err := executor.resolveValue(alphaRef, values)
+
+	if err != nil {
+		return err
+	}
+
+	addend, err := float32Vector(xValue)
+
+	if err != nil {
+		return err
+	}
+
+	alpha := float32FromAny(alphaValue, 0)
+
+	updated, err := axpyOnto(executor.stateMemory, yValue, addend, alpha)
+
+	if err != nil {
+		return err
+	}
+
+	for _, ref := range step.Out {
+		if strings.HasPrefix(ref, "state.") && executor.state != nil {
+			name := ref[len("state."):]
+			executor.state.Set(name, updated)
+		}
+
+		setRuntimeValue(values, ref, updated)
+	}
+
+	return nil
+}
+
 func (executor *Executor) runAppend(step ast.Step, values map[string]any) error {
 	targetRef, ok := step.Config["target"].(string)
 	if !ok {
@@ -443,7 +524,7 @@ func (executor *Executor) runSchedulerTimesteps(
 	return nil
 }
 
-func (executor *Executor) runSchedulerStep(
+func (executor *Executor) runSchedulerDelta(
 	ctx context.Context,
 	step ast.Step,
 	values map[string]any,
@@ -458,40 +539,57 @@ func (executor *Executor) runSchedulerStep(
 		return err
 	}
 
-	latents, err := executor.resolveTensorInput(step.In["latents"], values)
+	timestep := executor.currentTimestep(values)
+	timestepRef := step.In["timestep"]
 
-	if err != nil {
-		return err
-	}
+	if timestepRef != "" {
+		timestepValue, err := executor.resolveValue(timestepRef, values)
 
-	velocity, err := float32Vector(values[step.In["velocity"]])
-
-	if err != nil {
-		return err
-	}
-
-	timestep := float32(0)
-
-	if executor.state != nil {
-		stepIndex, ok := executor.state.Get("step_index")
-
-		if ok {
-			if counter, ok := stepIndex.(int64); ok {
-				timesteps, ok := values["timesteps"].([]float32)
-
-				if ok && int(counter) < len(timesteps) {
-					timestep = timesteps[counter]
-				}
-			}
+		if err != nil {
+			return err
 		}
+
+		timestep = float32(float64FromAny(timestepValue, float64(timestep)))
 	}
 
-	updated, err := scheduler.Step(latents, velocity, timestep)
-
-	if err != nil {
-		return err
+	for _, ref := range step.Out {
+		setRuntimeValue(values, ref, scheduler.Delta(timestep))
 	}
 
+	return nil
+}
+
+func (executor *Executor) currentTimestep(values map[string]any) float32 {
+	if executor.state == nil {
+		return 0
+	}
+
+	stepIndex, ok := executor.state.Get("step_index")
+
+	if !ok {
+		return 0
+	}
+
+	counter, ok := stepIndex.(int64)
+
+	if !ok {
+		return 0
+	}
+
+	timesteps, ok := values["timesteps"].([]float32)
+
+	if !ok || int(counter) >= len(timesteps) {
+		return 0
+	}
+
+	return timesteps[counter]
+}
+
+func (executor *Executor) storeSchedulerOutput(
+	step ast.Step,
+	values map[string]any,
+	updated any,
+) {
 	if executor.state != nil && step.In["latents"] != "" {
 		if strings.HasPrefix(step.In["latents"], "state.") {
 			name := step.In["latents"][len("state."):]
@@ -501,15 +599,16 @@ func (executor *Executor) runSchedulerStep(
 
 	for _, ref := range step.Out {
 		if strings.HasPrefix(ref, "state.") {
-			name := ref[len("state."):]
-			executor.state.Set(name, updated)
+			if executor.state != nil {
+				name := ref[len("state."):]
+				executor.state.Set(name, updated)
+			}
+
 			continue
 		}
 
-		values[ref] = updated
+		setRuntimeValue(values, ref, updated)
 	}
-
-	return nil
 }
 
 func (executor *Executor) runStateUpdate(ctx context.Context, step ast.Step) error {
@@ -658,6 +757,10 @@ func (executor *Executor) runGraphCall(
 		return fmt.Errorf("unknown graph %q", graphName)
 	}
 
+	if executor.backend == nil {
+		return fmt.Errorf("graph.call %q requires a backend", graphName)
+	}
+
 	inputs := make(map[string]any, len(step.In))
 
 	for name, ref := range step.In {
@@ -679,6 +782,7 @@ func (executor *Executor) runGraphCall(
 		GraphName: graphName,
 		Graph:     graph,
 		Compute:   compute[graphName],
+		Plan:      executor.plans[graphName],
 		Inputs:    inputs,
 	})
 
@@ -688,11 +792,25 @@ func (executor *Executor) runGraphCall(
 
 	for name, ref := range step.Out {
 		if value, ok := result.Outputs[name]; ok {
-			values[ref] = value
+			setRuntimeValue(values, ref, value)
 		}
 	}
 
 	return nil
+}
+
+func (executor *Executor) resolveValue(reference string, values map[string]any) (any, error) {
+	if strings.HasPrefix(reference, "state.") && executor.state != nil {
+		return executor.state.ResolveReference(reference)
+	}
+
+	value, ok := values[reference]
+
+	if !ok {
+		return nil, fmt.Errorf("unknown value %q", reference)
+	}
+
+	return value, nil
 }
 
 func (executor *Executor) scheduler(name string) (*FlowMatchEulerDiscrete, error) {
@@ -707,23 +825,6 @@ func (executor *Executor) scheduler(name string) (*FlowMatchEulerDiscrete, error
 	}
 
 	return scheduler, nil
-}
-
-func (executor *Executor) resolveTensorInput(
-	reference string,
-	values map[string]any,
-) ([]float32, error) {
-	if strings.HasPrefix(reference, "state.") && executor.state != nil {
-		value, err := executor.state.ResolveReference(reference)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return float32Vector(value)
-	}
-
-	return float32Vector(values[reference])
 }
 
 func sampleTopK(logits []float32, temperature float32, topK int) int {
@@ -853,6 +954,56 @@ func float32Vector(value any) ([]float32, error) {
 		return out, nil
 	default:
 		return nil, fmt.Errorf("expected float32 vector, got %T", value)
+	}
+}
+
+func setRuntimeValue(values map[string]any, ref string, value any) {
+	if previous, ok := values[ref]; ok {
+		previousTensor, previousIsTensor := previous.(tensor.Tensor)
+		nextTensor, nextIsTensor := value.(tensor.Tensor)
+
+		if previousIsTensor && (!nextIsTensor || previousTensor != nextTensor) {
+			closeRuntimeValue(previous)
+		}
+	}
+
+	values[ref] = value
+}
+
+func closeRuntimeValues(values map[string]any, initialValues map[string]any) {
+	for ref, value := range values {
+		if initialValues != nil {
+			if _, ok := initialValues[ref]; ok {
+				continue
+			}
+		}
+
+		closeRuntimeValue(value)
+	}
+}
+
+func closeRuntimeValue(value any) {
+	tensorValue, ok := value.(tensor.Tensor)
+
+	if !ok || tensorValue == nil {
+		return
+	}
+
+	_ = tensorValue.Close()
+}
+
+func float32FromAny(value any, fallback float32) float32 {
+	switch typed := value.(type) {
+	case float32:
+		return typed
+	case float64:
+		return float32(typed)
+	case int:
+		return float32(typed)
+	case int64:
+		return float32(typed)
+	default:
+		return fallback
 	}
 }
 

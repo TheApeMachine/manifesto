@@ -1,0 +1,18 @@
+kind: Operation
+category: bench
+op: bench.metric.accuracy
+name: Accuracy
+label: Accuracy
+description: Accumulates per-sample argmax accuracy. Each call updates the running mean and returns it as a scalar.
+initial_width: 240
+inputs:
+  - name: predicted
+    type: tensor
+    description: Predicted logits or probabilities
+  - name: targets
+    type: tensor
+    description: One-hot ground-truth labels
+outputs:
+  - name: accuracy
+    type: scalar
+    description: Running mean accuracy

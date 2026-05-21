@@ -1,0 +1,15 @@
+kind: Operation
+category: activation
+op: activation.swish
+name: Swish
+label: Swish
+description: Swish activation — x * sigmoid(x).
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Activated output

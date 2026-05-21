@@ -1,0 +1,18 @@
+kind: Operation
+category: vsa
+op: vsa.bind
+name: VSA Bind
+label: VSA Bind
+description: Binds two hypervectors.
+initial_width: 180
+inputs:
+  - name: a
+    type: tensor
+    description: Input tensor
+  - name: b
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: bound
+    type: tensor
+    description: Output tensor

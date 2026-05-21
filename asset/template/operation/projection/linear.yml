@@ -1,0 +1,22 @@
+kind: Operation
+category: projection
+op: projection.linear
+name: Linear
+label: Linear
+description: Fully-connected linear projection — y = xW^T + b.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input [M, in_features]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [M, out_features]
+config:
+  - name: in_features
+    type: int
+    description: Input feature count
+  - name: out_features
+    type: int
+    description: Output feature count

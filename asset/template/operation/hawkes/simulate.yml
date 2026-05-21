@@ -1,0 +1,21 @@
+kind: Operation
+category: hawkes
+op: hawkes.simulate
+name: Hawkes Simulate
+label: Hawkes Simulate
+description: Simulates Hawkes process events.
+initial_width: 180
+inputs:
+  - name: mu
+    type: tensor
+    description: Input tensor
+  - name: alpha
+    type: tensor
+    description: Input tensor
+  - name: beta
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: events
+    type: tensor
+    description: Output tensor

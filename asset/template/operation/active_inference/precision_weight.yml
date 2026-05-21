@@ -1,0 +1,18 @@
+kind: Operation
+category: active_inference
+op: active_inference.precision_weight
+name: Precision Weight
+label: Precision Weight
+description: Applies precision weighting to prediction errors.
+initial_width: 180
+inputs:
+  - name: error
+    type: tensor
+    description: Input tensor
+  - name: precision
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: weighted_error
+    type: tensor
+    description: Output tensor

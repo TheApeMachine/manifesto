@@ -1,0 +1,22 @@
+kind: Operation
+category: shape
+op: shape.concat
+name: Concat
+label: Concat
+description: Concatenates multiple tensors along one dimension.
+initial_width: 200
+inputs:
+  - name: a
+    type: tensor
+    description: First tensor
+  - name: b
+    type: tensor
+    description: Second tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Concatenated tensor
+config:
+  - name: dim
+    type: int
+    description: Axis to concatenate along

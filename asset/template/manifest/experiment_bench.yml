@@ -1,0 +1,43 @@
+# Example: SST-2 benchmark run.
+# Load a checkpoint, run the validation split, emit accuracy + F1.
+
+system:
+  topology:
+    nodes:
+      # ── Checkpoint ───────────────────────────────────────────────────────
+      - id: weights
+        op: train.checkpoint.load
+        config:
+          path: checkpoints/sst2/epoch_000010.json
+        out: [loaded_params]
+
+      # ── Data ─────────────────────────────────────────────────────────────
+      - id: val_data
+        op: data.huggingface
+        config:
+          dataset: glue
+          config: sst2
+          split: validation
+          field: label
+          page: 64
+        out: [val_labels]
+
+      # ── Model ────────────────────────────────────────────────────────────
+      - id: encoder
+        op: projection.linear
+        config:
+          in_features: 768
+          out_features: 2
+        in:  [loaded_params]
+        out: [logits]
+
+      # ── Metrics ──────────────────────────────────────────────────────────
+      - id: accuracy
+        op: bench.metric.accuracy
+        in:  [logits, val_labels]
+        out: [accuracy_score]
+
+      - id: f1
+        op: bench.metric.f1
+        in:  [logits, val_labels]
+        out: [f1_score]

@@ -1,0 +1,41 @@
+kind: Block
+category: memory
+op: block.memory.hopfield_modern
+name: Hopfield Modern
+label: Hopfield Modern
+description: Continuous Hopfield recall (Ramsauer et al. 2020) — single update step via softmax attention over stored patterns.
+initial_width: 260
+inputs:
+  - name: xi
+    type: tensor
+    description: Query vector [N]
+  - name: X
+    type: tensor
+    description: Stored patterns matrix [M, N]
+  - name: X_T
+    type: tensor
+    description: Transpose of X [N, M]
+outputs:
+  - name: x_new
+    type: tensor
+    description: Retrieved pattern [N]
+
+system:
+  topology:
+    nodes:
+      - id: hopfield_sim
+        op: math.matmul
+        in: [X, xi]
+        out: [scores]
+      - id: hopfield_scale
+        op: math.inv_sqrt_dim_scale
+        in: [scores]
+        out: [scores_scaled]
+      - id: hopfield_softmax
+        op: math.softmax
+        in: [scores_scaled]
+        out: [attn_weights]
+      - id: hopfield_retrieve
+        op: math.matmul
+        in: [X_T, attn_weights]
+        out: [x_new]

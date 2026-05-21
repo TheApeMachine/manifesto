@@ -1,0 +1,18 @@
+kind: Operation
+category: markov_blanket
+op: markov_blanket.mutual_information
+name: MB Mutual Information
+label: MB Mutual Information
+description: Computes mutual information between partitions.
+initial_width: 180
+inputs:
+  - name: X
+    type: tensor
+    description: Input tensor
+  - name: Y
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: mi
+    type: tensor
+    description: Output tensor

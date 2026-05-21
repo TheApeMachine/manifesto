@@ -1,0 +1,31 @@
+kind: Operation
+category: train
+op: train.optimizer.sgd
+name: SGD
+label: SGD Optimizer
+description: Stochastic gradient descent with optional momentum, Nesterov correction, and weight decay.
+initial_width: 260
+config:
+  - name: lr
+    type: float
+    description: "Learning rate (default: 0.01)"
+  - name: momentum
+    type: float
+    description: "Momentum factor (default: 0 — vanilla SGD)"
+  - name: wd
+    type: float
+    description: "Weight decay (default: 0)"
+  - name: nesterov
+    type: bool
+    description: "Enable Nesterov momentum (default: false)"
+inputs:
+  - name: params
+    type: tensor
+    description: Current parameter vector
+  - name: grads
+    type: tensor
+    description: Gradient vector
+outputs:
+  - name: params
+    type: tensor
+    description: Updated parameter vector

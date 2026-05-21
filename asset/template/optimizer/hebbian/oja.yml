@@ -1,0 +1,22 @@
+kind: Optimizer
+category: optimizer
+op: optimizer.oja
+name: Oja Rule
+label: Oja Rule
+description: Oja's rule — Hebbian with weight decay keeping vectors on the unit sphere.
+initial_width: 200
+inputs:
+  - name: params
+    type: tensor
+    description: Weight vector
+  - name: grads
+    type: tensor
+    description: Hebbian signal
+outputs:
+  - name: updated
+    type: tensor
+    description: Updated weights
+config:
+  - name: lr
+    type: float
+    default: 0.01

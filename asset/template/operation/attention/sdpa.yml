@@ -1,0 +1,21 @@
+kind: Operation
+category: attention
+op: attention.sdpa
+name: SDPA
+label: Scaled Dot-Product Attention
+description: Multi-head scaled dot-product attention (Flash-Attention style).
+initial_width: 280
+inputs:
+  - name: q
+    type: tensor
+    description: Query — [batch, num_heads, seq_len, head_dim]
+  - name: k
+    type: tensor
+    description: Key — [batch, num_heads, seq_len, head_dim]
+  - name: v
+    type: tensor
+    description: Value — [batch, num_heads, seq_len, head_dim]
+outputs:
+  - name: out
+    type: tensor
+    description: Attention output — [batch, num_heads, seq_len, head_dim]

@@ -1,0 +1,34 @@
+kind: Operation
+category: model
+op: model.freeze
+name: ModelFreeze
+label: Freeze / Unfreeze
+description: >
+  Marks weight groups as frozen or unfrozen. Frozen weights are skipped by
+  the optimizer step. Wire freeze nodes before training nodes to implement
+  standard fine-tuning patterns: freeze the base, train adapters/LoRA only;
+  or thaw specific layers for full fine-tuning.
+initial_width: 300
+config:
+  - name: source
+    type: string
+    description: "Source key — must match the model.load node's source"
+    required: true
+  - name: pattern
+    type: string
+    description: "Glob pattern of layers to freeze/unfreeze (e.g. transformer.h.[0-9]+ or **)"
+    required: true
+  - name: except
+    type: string
+    description: "Optional glob pattern of layers to exclude from the operation"
+  - name: frozen
+    type: bool
+    description: "true to freeze (default), false to unfreeze"
+inputs:
+  - name: trigger
+    type: scalar
+    description: Trigger from model.load, surgery, lora, or adapter
+outputs:
+  - name: out
+    type: scalar
+    description: Number of weight groups affected
