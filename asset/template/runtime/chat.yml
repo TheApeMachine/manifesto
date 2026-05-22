@@ -35,8 +35,7 @@ main:
             config:
               vocab_size: 128256
               temperature: 0.8
-              top_k: 50
-              top_p: 0.95
+              top_k: 1
             out: next_token
 
           - in: next_token
