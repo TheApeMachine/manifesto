@@ -244,7 +244,7 @@ nodes:
         config: { dim: 1 }
 
       - id: "tb_rope_q_${i}"
-        op: positional.flux2_rope
+        op: positional.multi_axis_rope
         in: ["tb_joint_q_${i}"]
         out: ["tb_qr_${i}"]
         config:
@@ -255,7 +255,7 @@ nodes:
           mode: half
 
       - id: "tb_rope_k_${i}"
-        op: positional.flux2_rope
+        op: positional.multi_axis_rope
         in: ["tb_joint_k_${i}"]
         out: ["tb_kr_${i}"]
         config:
@@ -460,7 +460,7 @@ nodes:
         config: { num_heads: "${include.num_attention_heads}" }
 
       - id: "st_rope_q_${i}"
-        op: positional.flux2_rope
+        op: positional.multi_axis_rope
         in: ["st_qhn_${i}"]
         out: ["st_qr_${i}"]
         config:
@@ -471,7 +471,7 @@ nodes:
           mode: half
 
       - id: "st_rope_k_${i}"
-        op: positional.flux2_rope
+        op: positional.multi_axis_rope
         in: ["st_khn_${i}"]
         out: ["st_kr_${i}"]
         config:
