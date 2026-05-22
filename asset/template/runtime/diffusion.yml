@@ -11,8 +11,15 @@ state:
     shape: [1, 4096, 128]
     init: gaussian
     seed: 0
+    config:
+      dtype: bf16
   - name: step_index
     type: counter
+  - name: prompt_embeds
+    type: tensor
+    shape: [1, 1024, 7680]
+    config:
+      dtype: bf16
 
 schedulers:
   scheduler:
@@ -32,7 +39,7 @@ main:
       tokenizer: flux2klein.system.runtime.tokenizer.source
       tokenizer_file: flux2klein.system.runtime.tokenizer.file
       apply_chat_template: true
-      max_length: 512
+      max_length: 1024
       pad_token_id: 151643
     out: input_ids
 
@@ -41,7 +48,7 @@ main:
     op: graph.call
     graph: flux2klein.text_encoder
     out:
-      prompt_embeds: prompt_embeds
+      prompt_embeds: state.prompt_embeds
 
   - op: scheduler.timesteps
     config:
@@ -54,7 +61,7 @@ main:
     steps:
       - in:
           hidden_states: state.latents
-          encoder_hidden_states: prompt_embeds
+          encoder_hidden_states: state.prompt_embeds
           timestep: timestep
         op: graph.call
         graph: flux2klein

@@ -220,12 +220,33 @@ func MaterializeStateTensors(
 			continue
 		}
 
-		if err := materializeStateTensorByDeclaration(stateStore, declaration, memory, storageDType); err != nil {
+		if err := materializeStateTensorByDeclaration(
+			stateStore,
+			declaration,
+			memory,
+			stateStorageDType(declaration, storageDType),
+		); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func stateStorageDType(declaration ast.StateDeclaration, fallback dtype.DType) dtype.DType {
+	raw, ok := declaration.Config["dtype"].(string)
+
+	if !ok || raw == "" {
+		return fallback
+	}
+
+	parsed, err := dtype.Parse(raw)
+
+	if err != nil || !parsed.IsFloat() {
+		return fallback
+	}
+
+	return parsed
 }
 
 func materializeStateTensorByDeclaration(
