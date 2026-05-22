@@ -101,32 +101,9 @@ func (store *StateStore) initializePageTable(declaration ast.StateDeclaration) (
 func (store *StateStore) initializeTensor(declaration ast.StateDeclaration) (any, error) {
 	switch declaration.Init {
 	case "gaussian":
-		seed := int64(0)
-
-		if declaration.Seed != nil {
-			switch typed := declaration.Seed.(type) {
-			case int:
-				seed = int64(typed)
-			case int64:
-				seed = typed
-			case float64:
-				seed = int64(typed)
-			}
-		}
-
+		seed := int64FromAny(declaration.Seed, 0)
 		rng := rand.New(rand.NewSource(seed))
-		elementCount := int64(1)
-
-		for _, dimension := range declaration.Shape {
-			switch typed := dimension.(type) {
-			case int:
-				elementCount *= int64(typed)
-			case int64:
-				elementCount *= typed
-			case float64:
-				elementCount *= int64(typed)
-			}
-		}
+		elementCount := stateElementCount(declaration.Shape)
 
 		values := make([]float32, elementCount)
 
@@ -136,7 +113,37 @@ func (store *StateStore) initializeTensor(declaration ast.StateDeclaration) (any
 
 		return values, nil
 	default:
-		return make([]float32, 0), nil
+		return make([]float32, stateElementCount(declaration.Shape)), nil
+	}
+}
+
+func stateElementCount(shape []any) int64 {
+	elementCount := int64(1)
+
+	for _, dimension := range shape {
+		switch typed := dimension.(type) {
+		case int:
+			elementCount *= int64(typed)
+		case int64:
+			elementCount *= typed
+		case float64:
+			elementCount *= int64(typed)
+		}
+	}
+
+	return elementCount
+}
+
+func int64FromAny(value any, fallback int64) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	default:
+		return fallback
 	}
 }
 

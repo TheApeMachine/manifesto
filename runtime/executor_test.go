@@ -438,6 +438,36 @@ func TestMaterializeStateTensors(testingObject *testing.T) {
 	})
 }
 
+func TestMaterializeZeroInitializedStateTensor(testingObject *testing.T) {
+	convey.Convey("Given a tensor state declaration without an initializer", testingObject, func() {
+		declarations := []ast.StateDeclaration{
+			{
+				Name:  "position_offset",
+				Type:  "tensor",
+				Shape: []any{1},
+			},
+		}
+		state, err := NewStateStore(declarations)
+		convey.So(err, convey.ShouldBeNil)
+
+		convey.Convey("It should materialize a zero-filled tensor matching the declared shape", func() {
+			err := MaterializeStateTensors(state, declarations, tensor.NewHostBackend(), dtype.Float32)
+			convey.So(err, convey.ShouldBeNil)
+
+			value, ok := state.Get("position_offset")
+			convey.So(ok, convey.ShouldBeTrue)
+
+			stateTensor, ok := value.(tensor.Tensor)
+			convey.So(ok, convey.ShouldBeTrue)
+			convey.So(stateTensor.Shape().Dims(), convey.ShouldResemble, []int{1})
+
+			values, err := stateTensor.Float32Native()
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(values, convey.ShouldResemble, []float32{0})
+		})
+	})
+}
+
 func TestMaterializeStatePagedTensors(testingObject *testing.T) {
 	convey.Convey("Given generic paged tensor state and a runtime dtype", testingObject, func() {
 		declarations := []ast.StateDeclaration{
