@@ -150,14 +150,31 @@ func (scheduler *FlowMatchEulerDiscrete) Delta(timestep float32) float32 {
 	return scheduler.sigmas[sigmaIndex+1] - scheduler.sigmas[sigmaIndex]
 }
 
+func (scheduler *FlowMatchEulerDiscrete) DeltaForStepIndex(stepIndex int) float32 {
+	if len(scheduler.sigmas) != scheduler.Steps+1 {
+		scheduler.Timesteps()
+	}
+
+	if stepIndex < 0 || stepIndex >= scheduler.Steps {
+		return 0
+	}
+
+	return scheduler.sigmas[stepIndex+1] - scheduler.sigmas[stepIndex]
+}
+
 func (scheduler *FlowMatchEulerDiscrete) sigmaIndex(timestep float32) int {
 	timesteps := scheduler.Timesteps()
+	bestIndex := 0
+	bestDistance := float32(math.MaxFloat32)
 
 	for index, candidate := range timesteps {
-		if candidate == timestep {
-			return index
+		distance := float32(math.Abs(float64(candidate - timestep)))
+
+		if distance < bestDistance {
+			bestDistance = distance
+			bestIndex = index
 		}
 	}
 
-	return 0
+	return bestIndex
 }

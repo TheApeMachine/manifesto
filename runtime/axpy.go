@@ -1,11 +1,10 @@
 package runtime
 
 import (
-	"encoding/binary"
 	"fmt"
-	"math"
 
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/dtype/convert"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -66,7 +65,7 @@ func axpyOnto(
 		updated, err := memory.Upload(
 			typedTarget.Shape(),
 			storageDType,
-			float32VectorBytes(targetValues),
+			float32VectorBytes(storageDType, targetValues),
 		)
 
 		if err != nil {
@@ -82,28 +81,30 @@ func axpyOnto(
 }
 
 func bytesToFloat32Vector(storageDType dtype.DType, raw []byte) ([]float32, error) {
-	if storageDType != dtype.Float32 {
-		return nil, fmt.Errorf("math.axpy: expected float32 tensor, got %s", storageDType)
-	}
-
-	elementCount := len(raw) / 4
-	values := make([]float32, elementCount)
-
-	for index := range elementCount {
-		values[index] = math.Float32frombits(
-			binary.LittleEndian.Uint32(raw[index*4 : index*4+4]),
-		)
-	}
-
-	return values, nil
+	return convert.BytesToFloat32(storageDType, raw)
 }
 
-func float32VectorBytes(values []float32) []byte {
-	raw := make([]byte, len(values)*4)
+func float32VectorBytes(storageDType dtype.DType, values []float32) []byte {
+	switch storageDType {
+	case dtype.Float32:
+		return convert.Float32ToBytes(values)
+	case dtype.Float16:
+		converted := make([]dtype.F16, len(values))
 
-	for index, value := range values {
-		binary.LittleEndian.PutUint32(raw[index*4:], math.Float32bits(value))
+		for index, value := range values {
+			converted[index] = dtype.Fromfloat32(value)
+		}
+
+		return convert.Float16ToBytes(converted)
+	case dtype.BFloat16:
+		converted := make([]dtype.BF16, len(values))
+
+		for index, value := range values {
+			converted[index] = dtype.NewBfloat16FromFloat32(value)
+		}
+
+		return convert.BFloat16ToBytes(converted)
+	default:
+		return convert.Float32ToBytes(values)
 	}
-
-	return raw
 }

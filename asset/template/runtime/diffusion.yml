@@ -10,7 +10,7 @@ state:
     type: tensor
     shape: [1, 4096, 128]
     init: gaussian
-    seed: 0
+    seed: 1337
     config:
       dtype: bf16
   - name: step_index
@@ -69,7 +69,7 @@ main:
           sample: velocity
 
       - in:
-          timestep: timestep
+          step_index: state.step_index
         op: scheduler.delta
         config:
           scheduler: scheduler

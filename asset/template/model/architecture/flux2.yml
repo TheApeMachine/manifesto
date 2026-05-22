@@ -21,6 +21,7 @@
 #   mlp_packed              SwiGLU packed gate+up dim (2*mlp_inner)
 #   rope_theta              RoPE base (e.g. 2000)
 #   eps                     RMSNorm eps (e.g. 1e-06)
+#   context_seq_len         text token count (e.g. 1024)
 #   latent_seq_len          latent token count after concat trim (e.g. 4096)
 #   latent_side             latent grid side length after packing (e.g. 64)
 #   dual_terminal_index     `${num_layers}` as a literal — used to wire the
@@ -37,6 +38,7 @@ nodes:
       flip_sin_to_cos: true
       downscale_freq_shift: 0
       max_period: 10000
+      timestep_divisor: 1000
 
   - id: time_guidance_embed.timestep_embedder.linear_1
     op: projection.linear
@@ -283,7 +285,7 @@ nodes:
         config:
           dim: 1
           start: 0
-          end: -${include.latent_seq_len}
+          end: ${include.context_seq_len}
 
       - id: "tb_latent_attn_slice_${i}"
         op: shape.slice
@@ -291,7 +293,7 @@ nodes:
         out: ["tb_latent_attn_flat_${i}"]
         config:
           dim: 1
-          start: -${include.latent_seq_len}
+          start: ${include.context_seq_len}
           end: 0
 
       - id: "transformer_blocks.${i}.attn.to_out.0"
@@ -581,5 +583,5 @@ nodes:
     out: [sample]
     config:
       dim: 1
-      start: -${include.latent_seq_len}
+      start: ${include.context_seq_len}
       end: 0

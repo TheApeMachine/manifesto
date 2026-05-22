@@ -9,6 +9,9 @@ inputs:
   - name: timestep
     type: scalar
     description: Current scheduler timestep
+  - name: step_index
+    type: scalar
+    description: Zero-based denoising loop index
 outputs:
   - name: delta
     type: scalar

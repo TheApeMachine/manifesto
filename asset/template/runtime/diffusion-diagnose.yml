@@ -1,0 +1,54 @@
+kind: program
+name: diffusion-diagnose
+category: runtime
+
+include:
+  flux2klein: model.diffusion.flux-2-klein-4b
+
+state:
+  - name: latents
+    type: tensor
+    shape: [1, 4096, 128]
+    init: gaussian
+    seed: 1337
+    config:
+      dtype: bf16
+  - name: prompt_embeds
+    type: tensor
+    shape: [1, 1024, 7680]
+    config:
+      dtype: bf16
+
+schedulers:
+  scheduler:
+    type: flow_match_euler_discrete
+    config:
+      steps: flux2klein.system.runtime.scheduler.num_inference_steps
+      num_train_timesteps: 1000
+      shift: 3.0
+      use_dynamic_shifting: true
+      time_shift_type: exponential
+      image_seq_len: 4096
+
+main:
+  - in: prompt
+    op: tokenizer.encode
+    config:
+      tokenizer: flux2klein.system.runtime.tokenizer.source
+      tokenizer_file: flux2klein.system.runtime.tokenizer.file
+      apply_chat_template: true
+      max_length: 1024
+      pad_token_id: 151643
+    out: input_ids
+
+  - in:
+      input_ids: input_ids
+    op: graph.call
+    graph: flux2klein.text_encoder
+    out:
+      prompt_embeds: state.prompt_embeds
+
+  - op: scheduler.timesteps
+    config:
+      scheduler: scheduler
+    out: timesteps

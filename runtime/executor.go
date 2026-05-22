@@ -564,21 +564,39 @@ func (executor *Executor) runSchedulerDelta(
 		return err
 	}
 
-	timestep := executor.currentTimestep(values)
-	timestepRef := step.In["timestep"]
+	var delta float32
 
-	if timestepRef != "" {
-		timestepValue, err := executor.resolveValue(timestepRef, values)
+	stepIndexRef, useStepIndex := step.In["step_index"]
+
+	if useStepIndex && stepIndexRef != "" {
+		stepIndexValue, err := executor.resolveValue(stepIndexRef, values)
 
 		if err != nil {
 			return err
 		}
 
-		timestep = float32(float64FromAny(timestepValue, float64(timestep)))
+		delta = scheduler.DeltaForStepIndex(int(float64FromAny(stepIndexValue, 0)))
+	}
+
+	if !useStepIndex || stepIndexRef == "" {
+		timestep := executor.currentTimestep(values)
+		timestepRef := step.In["timestep"]
+
+		if timestepRef != "" {
+			timestepValue, err := executor.resolveValue(timestepRef, values)
+
+			if err != nil {
+				return err
+			}
+
+			timestep = float32(float64FromAny(timestepValue, float64(timestep)))
+		}
+
+		delta = scheduler.Delta(timestep)
 	}
 
 	for _, ref := range step.Out {
-		setRuntimeValue(values, ref, scheduler.Delta(timestep))
+		setRuntimeValue(values, ref, delta)
 	}
 
 	return nil

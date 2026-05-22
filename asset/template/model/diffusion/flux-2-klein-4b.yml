@@ -110,5 +110,6 @@ system:
         rope_theta: 2000
         eps: 1e-06
       variables:
+        context_seq_len: 1024
         latent_seq_len: 4096
         latent_side: 64
