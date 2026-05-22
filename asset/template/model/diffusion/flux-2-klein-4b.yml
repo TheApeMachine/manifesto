@@ -98,6 +98,7 @@ system:
       architecture: Flux2Transformer2DModel
       config:
         architectures: [Flux2Transformer2DModel]
+        torch_dtype: bfloat16
         in_channels: 128
         hidden_size: 3072
         joint_attention_dim: 7680
