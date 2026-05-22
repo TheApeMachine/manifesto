@@ -214,16 +214,35 @@ func MaterializeStateTensors(
 	}
 
 	for _, declaration := range declarations {
-		if declaration.Type != "tensor" {
+		if declaration.Type != "tensor" &&
+			declaration.Type != "paged_tensor" &&
+			declaration.Type != "page_table" {
 			continue
 		}
 
-		if err := materializeStateTensor(stateStore, declaration, memory, storageDType); err != nil {
+		if err := materializeStateTensorByDeclaration(stateStore, declaration, memory, storageDType); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func materializeStateTensorByDeclaration(
+	stateStore *StateStore,
+	declaration ast.StateDeclaration,
+	memory tensor.Backend,
+	storageDType dtype.DType,
+) error {
+	if declaration.Type == "paged_tensor" {
+		return materializePagedStateTensor(stateStore, declaration, memory, storageDType)
+	}
+
+	if declaration.Type == "page_table" {
+		return materializePageTableStateTensor(stateStore, declaration, memory)
+	}
+
+	return materializeStateTensor(stateStore, declaration, memory, storageDType)
 }
 
 func materializeStateTensor(
@@ -261,6 +280,97 @@ func materializeStateTensor(
 	}
 
 	stateStore.Set(declaration.Name, tensorValue)
+
+	return nil
+}
+
+func materializePageTableStateTensor(
+	stateStore *StateStore,
+	declaration ast.StateDeclaration,
+	memory tensor.Backend,
+) error {
+	value, ok := stateStore.Get(declaration.Name)
+
+	if !ok {
+		return nil
+	}
+
+	table, ok := value.(*PageTableState)
+
+	if !ok {
+		return fmt.Errorf("runtime session: state %q is %T, expected *PageTableState", declaration.Name, value)
+	}
+
+	if _, ok := table.Storage.(tensor.Tensor); ok {
+		return nil
+	}
+
+	capacity := table.Capacity
+
+	if capacity <= 0 {
+		capacity = 1
+	}
+
+	shape, err := tensor.NewShape([]int{capacity})
+
+	if err != nil {
+		return err
+	}
+
+	tensorValue, err := memory.Upload(shape, dtype.Int32, make([]byte, capacity*4))
+
+	if err != nil {
+		return err
+	}
+
+	table.Storage = tensorValue
+	stateStore.Set(declaration.Name, table)
+
+	return nil
+}
+
+func materializePagedStateTensor(
+	stateStore *StateStore,
+	declaration ast.StateDeclaration,
+	memory tensor.Backend,
+	storageDType dtype.DType,
+) error {
+	value, ok := stateStore.Get(declaration.Name)
+
+	if !ok {
+		return nil
+	}
+
+	paged, ok := value.(*PagedTensorState)
+
+	if !ok {
+		return fmt.Errorf("runtime session: state %q is %T, expected *PagedTensorState", declaration.Name, value)
+	}
+
+	if _, ok := paged.Storage.(tensor.Tensor); ok {
+		return nil
+	}
+
+	shape, err := tensor.NewShape(paged.Shape)
+
+	if err != nil {
+		return err
+	}
+
+	byteCount, err := storageDType.BytesFor(shape.Len())
+
+	if err != nil {
+		return err
+	}
+
+	tensorValue, err := memory.Upload(shape, storageDType, make([]byte, byteCount))
+
+	if err != nil {
+		return err
+	}
+
+	paged.Storage = tensorValue
+	stateStore.Set(declaration.Name, paged)
 
 	return nil
 }

@@ -139,8 +139,16 @@ func (inferencer *ShapeInferencer) inferNode(
 		return inferencer.inferIdentity(inputShapes)
 	case "shape.last_token":
 		return inferencer.inferLastToken(inputShapes)
+	case "shape.slice":
+		return inferencer.inferSlice(topologyNode.Config, inputShapes)
 	case "shape.concat":
 		return inferencer.inferConcat(topologyNode.Config, inputShapes)
+	case "state.page_alloc", "state.page_write":
+		return inferencer.inferConfiguredStorage(topologyNode.Config, inputShapes)
+	case "state.page_table_append":
+		return inferencer.inferIdentity(inputShapes)
+	case "state.page_gather":
+		return inferencer.inferPageGather(topologyNode.Config, inputShapes)
 	default:
 		return inferencer.inferIdentity(inputShapes)
 	}
@@ -309,6 +317,87 @@ func (inferencer *ShapeInferencer) inferConcat(
 	return [][]int64{output}, nil
 }
 
+func (inferencer *ShapeInferencer) inferSlice(
+	config map[string]any,
+	inputShapes [][]int64,
+) ([][]int64, error) {
+	if len(inputShapes) == 0 {
+		return [][]int64{ast.NewDynamicShape(1)}, nil
+	}
+
+	output := cloneShape(inputShapes[0])
+	axis, err := inferencer.configInt64(config, "dim", "axis")
+
+	if err != nil {
+		axis = 0
+	}
+
+	if axis < 0 {
+		axis += int64(len(output))
+	}
+
+	if axis < 0 || int(axis) >= len(output) {
+		return nil, fmt.Errorf("slice axis %d out of range", axis)
+	}
+
+	start := int64(0)
+	end := output[axis]
+
+	if configuredStart, err := inferencer.configInt64(config, "start"); err == nil {
+		start = configuredStart
+	}
+
+	if configuredEnd, err := inferencer.configInt64(config, "end"); err == nil && configuredEnd > 0 {
+		end = configuredEnd
+	}
+
+	if end > 0 && start >= 0 {
+		output[axis] = end - start
+		return [][]int64{output}, nil
+	}
+
+	output[axis] = ast.DynamicDim
+
+	return [][]int64{output}, nil
+}
+
+func (inferencer *ShapeInferencer) inferConfiguredStorage(
+	config map[string]any,
+	inputShapes [][]int64,
+) ([][]int64, error) {
+	if shape, ok := shapeFromConfig(config, "storage_shape", "shape"); ok {
+		return [][]int64{shape}, nil
+	}
+
+	return inferencer.inferIdentity(inputShapes)
+}
+
+func (inferencer *ShapeInferencer) inferPageGather(
+	config map[string]any,
+	inputShapes [][]int64,
+) ([][]int64, error) {
+	storageShape, ok := shapeFromConfig(config, "shape", "storage_shape")
+
+	if !ok && len(inputShapes) > 0 {
+		storageShape = cloneShape(inputShapes[0])
+		ok = true
+	}
+
+	if !ok || len(storageShape) < 2 {
+		return [][]int64{ast.NewDynamicShape(1)}, nil
+	}
+
+	length := ast.DynamicDim
+
+	if configuredLength, err := inferencer.configInt64(config, "length", "tokens"); err == nil {
+		length = configuredLength
+	}
+
+	output := append([]int64{length}, cloneShape(storageShape[2:])...)
+
+	return [][]int64{output}, nil
+}
+
 func (inferencer *ShapeInferencer) inferIdentity(inputShapes [][]int64) ([][]int64, error) {
 	if len(inputShapes) == 0 {
 		return [][]int64{ast.NewDynamicShape(1)}, nil
@@ -360,4 +449,43 @@ func cloneShape(shape []int64) []int64 {
 	copy(cloned, shape)
 
 	return cloned
+}
+
+func shapeFromConfig(config map[string]any, keys ...string) ([]int64, bool) {
+	for _, key := range keys {
+		raw, ok := config[key]
+
+		if !ok {
+			continue
+		}
+
+		switch typed := raw.(type) {
+		case []int64:
+			return cloneShape(typed), true
+		case []int:
+			shape := make([]int64, 0, len(typed))
+
+			for _, dimension := range typed {
+				shape = append(shape, int64(dimension))
+			}
+
+			return shape, true
+		case []any:
+			shape := make([]int64, 0, len(typed))
+
+			for _, value := range typed {
+				dimension, err := dtype.Int64Value(value)
+
+				if err != nil {
+					return nil, false
+				}
+
+				shape = append(shape, dimension)
+			}
+
+			return shape, true
+		}
+	}
+
+	return nil, false
 }

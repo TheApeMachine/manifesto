@@ -1,0 +1,26 @@
+kind: Operation
+category: state
+op: state.page_gather
+name: PageGather
+label: Page Gather
+description: Gathers a logical tensor view from generic paged tensor storage using manifest-provided page indices.
+initial_width: 240
+inputs:
+  - name: storage
+    type: tensor
+    description: Paged tensor storage
+  - name: page_ids
+    type: tensor
+    description: Page table entries identifying visible pages
+outputs:
+  - name: value
+    type: tensor
+    description: Logical gathered tensor view
+config:
+  - name: shape
+    type: shape
+    description: Shape of the paged tensor storage
+  - name: length
+    type: int
+    default: 0
+    description: Number of logical rows to gather; zero means dynamic length

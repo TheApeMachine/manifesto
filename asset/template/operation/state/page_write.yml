@@ -1,0 +1,29 @@
+kind: Operation
+category: state
+op: state.page_write
+name: PageWrite
+label: Page Write
+description: Writes tensor values into generic paged tensor storage at manifest-provided page positions.
+initial_width: 240
+inputs:
+  - name: storage
+    type: tensor
+    description: Paged tensor storage
+  - name: value
+    type: tensor
+    description: Values to write
+  - name: page_ids
+    type: tensor
+    description: Page indices or page table entries identifying destination pages
+outputs:
+  - name: storage
+    type: tensor
+    description: Updated paged tensor storage
+config:
+  - name: storage_shape
+    type: shape
+    description: Shape of the paged tensor storage
+  - name: page_size
+    type: int
+    default: 0
+    description: Number of logical rows per page

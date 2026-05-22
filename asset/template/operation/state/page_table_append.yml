@@ -1,0 +1,23 @@
+kind: Operation
+category: state
+op: state.page_table_append
+name: PageTableAppend
+label: Page Table Append
+description: Appends allocated page indices to a generic page table state.
+initial_width: 240
+inputs:
+  - name: table
+    type: tensor
+    description: Existing page table
+  - name: page_ids
+    type: tensor
+    description: Page indices to append
+outputs:
+  - name: table
+    type: tensor
+    description: Updated page table
+config:
+  - name: capacity
+    type: int
+    default: 0
+    description: Maximum page entries; zero means manifest-defined dynamic capacity

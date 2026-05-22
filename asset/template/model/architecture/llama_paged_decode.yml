@@ -1,0 +1,98 @@
+kind: Architecture
+category: model.architecture
+op: model.architecture.llama_paged_decode
+name: LlamaPagedDecode
+label: Llama Paged Decode
+description: Manifest-composed Llama decode recipe using generic paged tensor atoms.
+
+topology:
+  inputs:
+    - input_ids
+    - position_offset
+    - key_pages
+    - value_pages
+    - key_page_table
+    - value_page_table
+    - write_page_ids
+    - write_offsets
+
+  nodes:
+    - id: q_rope_layer
+      op: positional.rope
+      in:
+        - q_heads_layer
+        - position_offset
+      out:
+        - q_rope_layer
+      config:
+        mode: half
+
+    - id: k_rope_layer
+      op: positional.rope
+      in:
+        - k_heads_layer
+        - position_offset
+      out:
+        - k_rope_layer
+      config:
+        mode: half
+
+    - id: key_page_write_layer
+      op: state.page_write
+      in:
+        - key_pages
+        - k_rope_layer
+        - write_page_ids
+        - write_offsets
+      out:
+        - key_pages
+      config:
+        page_size: 16
+
+    - id: value_page_write_layer
+      op: state.page_write
+      in:
+        - value_pages
+        - v_heads_layer
+        - write_page_ids
+        - write_offsets
+      out:
+        - value_pages
+      config:
+        page_size: 16
+
+    - id: key_page_gather_layer
+      op: state.page_gather
+      in:
+        - key_pages
+        - key_page_table
+      out:
+        - key_visible_layer
+      config:
+        page_size: 16
+
+    - id: value_page_gather_layer
+      op: state.page_gather
+      in:
+        - value_pages
+        - value_page_table
+      out:
+        - value_visible_layer
+      config:
+        page_size: 16
+
+    - id: attention_layer
+      op: attention.gqa
+      in:
+        - q_rope_layer
+        - key_visible_layer
+        - value_visible_layer
+      out:
+        - attention_heads_layer
+
+    - id: logits_last_token
+      op: shape.last_token
+      in:
+        - final_norm
+      out:
+        - decode_hidden

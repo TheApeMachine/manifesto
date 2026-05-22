@@ -5,6 +5,37 @@ category: runtime
 include:
   model: hf://meta-llama/Llama-3.2-1B-Instruct
 
+state:
+  - name: key_pages
+    type: paged_tensor
+    shape: [4096, 16, 8, 64]
+    config:
+      page_size: 16
+      page_count: 4096
+  - name: value_pages
+    type: paged_tensor
+    shape: [4096, 16, 8, 64]
+    config:
+      page_size: 16
+      page_count: 4096
+  - name: key_page_table
+    type: page_table
+    config:
+      capacity: 4096
+  - name: value_page_table
+    type: page_table
+    config:
+      capacity: 4096
+  - name: position_offset
+    type: tensor
+    shape: [1]
+  - name: write_page_ids
+    type: tensor
+    shape: [1]
+  - name: write_offsets
+    type: tensor
+    shape: [1]
+
 main:
   # Session: keep reading until stdin closes or user exits
   - repeat: until_eof
@@ -18,6 +49,7 @@ main:
         config:
           tokenizer: hf://meta-llama/Llama-3.2-1B-Instruct
           apply_chat_template: true
+          append_to: input_ids
         out: input_ids
 
       # Decode loop — all atomics / graph.call, no sampler object
@@ -25,10 +57,19 @@ main:
         steps:
           - in:
               input_ids: input_ids
+              position_offset: state.position_offset
+              key_pages: state.key_pages
+              value_pages: state.value_pages
+              key_page_table: state.key_page_table
+              value_page_table: state.value_page_table
+              write_page_ids: state.write_page_ids
+              write_offsets: state.write_offsets
             op: graph.call
             graph: model
             out:
               logits: logits
+              key_pages: state.key_pages
+              value_pages: state.value_pages
 
           - in: logits
             op: sampling.topk_sample
@@ -36,6 +77,10 @@ main:
               vocab_size: 128256
               temperature: 0.8
               top_k: 1
+              stop_token_ids:
+                - 128001
+                - 128008
+                - 128009
             out: next_token
 
           - in: next_token

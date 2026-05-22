@@ -1,0 +1,23 @@
+kind: Operation
+category: state
+op: state.page_alloc
+name: PageAlloc
+label: Page Allocate
+description: Allocates logical page indices for a generic paged tensor state.
+initial_width: 220
+inputs:
+  - name: counter
+    type: tensor
+    description: Allocation counter or cursor
+outputs:
+  - name: page_ids
+    type: tensor
+    description: Allocated page indices
+config:
+  - name: pages
+    type: int
+    default: 1
+    description: Number of pages to allocate
+  - name: storage_shape
+    type: shape
+    description: Shape of the paged tensor storage

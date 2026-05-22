@@ -26,11 +26,12 @@ type Backend interface {
 GraphCallRequest is one graph.call runtime step.
 */
 type GraphCallRequest struct {
-	GraphName string
-	Graph     *ast.Graph
-	Compute   any
-	Plan      *ExecutionPlan
-	Inputs    map[string]any
+	GraphName    string
+	Graph        *ast.Graph
+	Compute      any
+	Plan         *ExecutionPlan
+	Inputs       map[string]any
+	StateOutputs map[string]bool
 }
 
 /*
@@ -254,8 +255,15 @@ func (executor *Executor) runEncode(
 	tokenizerName, _ := step.Config["tokenizer"].(string)
 	tokenizerFile, _ := step.Config["tokenizer_file"].(string)
 	applyChatTemplate, _ := step.Config["apply_chat_template"].(bool)
+	appendTo, _ := step.Config["append_to"].(string)
 	maxLength := intFromConfig(step.Config, "max_length", 0)
 	padTokenID := intFromConfig(step.Config, "pad_token_id", 0)
+	chatContinuation := false
+
+	if appendTo != "" {
+		existing, ok := values[appendTo].([]int)
+		chatContinuation = ok && len(existing) > 0
+	}
 
 	var tokenIDs []int
 	var err error
@@ -266,6 +274,7 @@ func (executor *Executor) runEncode(
 			TokenizerFile:     tokenizerFile,
 			Text:              text,
 			ApplyChatTemplate: applyChatTemplate,
+			ChatContinuation:  chatContinuation,
 			MaxLength:         maxLength,
 			PadTokenID:        padTokenID,
 		})
@@ -275,6 +284,14 @@ func (executor *Executor) runEncode(
 
 	if err != nil {
 		return err
+	}
+
+	if appendTo != "" {
+		existing, ok := values[appendTo].([]int)
+
+		if ok {
+			tokenIDs = append(append([]int(nil), existing...), tokenIDs...)
+		}
 	}
 
 	for _, ref := range step.Out {
@@ -376,6 +393,14 @@ func (executor *Executor) runTopKSample(
 	topK := intFromConfig(step.Config, "top_k", 50)
 
 	tokenID := sampleTopK(logits, temperature, topK)
+	stopTokenIDs := intSliceFromConfig(step.Config, "stop_token_ids")
+
+	for _, stopTokenID := range stopTokenIDs {
+		if tokenID == stopTokenID {
+			values["__loop_break__"] = true
+			break
+		}
+	}
 
 	for _, ref := range step.Out {
 		values[ref] = tokenID
@@ -687,6 +712,8 @@ func (executor *Executor) runLoopCount(
 		return err
 	}
 
+	delete(values, "__loop_break__")
+
 	for iteration := 0; iteration < count; iteration++ {
 		values["__loop_index__"] = iteration
 
@@ -694,6 +721,13 @@ func (executor *Executor) runLoopCount(
 			if err := executor.runStep(ctx, child, graphs, compute, values); err != nil {
 				return err
 			}
+		}
+
+		shouldBreak, ok := values["__loop_break__"].(bool)
+
+		if ok && shouldBreak {
+			delete(values, "__loop_break__")
+			return nil
 		}
 	}
 
@@ -717,6 +751,14 @@ func (executor *Executor) runLoopUntilEOF(
 				}
 
 				return err
+			}
+
+			if child.Op == "io.read_line" {
+				line, ok := values["user_text"].(string)
+
+				if ok && line == "" {
+					return nil
+				}
 			}
 		}
 
@@ -779,11 +821,12 @@ func (executor *Executor) runGraphCall(
 	}
 
 	result, err := executor.backend.CallGraph(ctx, GraphCallRequest{
-		GraphName: graphName,
-		Graph:     graph,
-		Compute:   compute[graphName],
-		Plan:      executor.plans[graphName],
-		Inputs:    inputs,
+		GraphName:    graphName,
+		Graph:        graph,
+		Compute:      compute[graphName],
+		Plan:         executor.plans[graphName],
+		Inputs:       inputs,
+		StateOutputs: stateOutputsForStep(step),
 	})
 
 	if err != nil {
@@ -792,11 +835,31 @@ func (executor *Executor) runGraphCall(
 
 	for name, ref := range step.Out {
 		if value, ok := result.Outputs[name]; ok {
+			if strings.HasPrefix(ref, "state.") && executor.state != nil {
+				if err := executor.state.SetReference(ref, value); err != nil {
+					return err
+				}
+
+				continue
+			}
+
 			setRuntimeValue(values, ref, value)
 		}
 	}
 
 	return nil
+}
+
+func stateOutputsForStep(step ast.Step) map[string]bool {
+	outputs := make(map[string]bool)
+
+	for name, ref := range step.Out {
+		if strings.HasPrefix(ref, "state.") {
+			outputs[name] = true
+		}
+	}
+
+	return outputs
 }
 
 func (executor *Executor) resolveValue(reference string, values map[string]any) (any, error) {
@@ -1042,5 +1105,28 @@ func intFromConfig(config map[string]any, key string, fallback int) int {
 		return int(typed)
 	default:
 		return fallback
+	}
+}
+
+func intSliceFromConfig(config map[string]any, key string) []int {
+	raw, ok := config[key]
+
+	if !ok {
+		return nil
+	}
+
+	switch typed := raw.(type) {
+	case []int:
+		return typed
+	case []any:
+		values := make([]int, 0, len(typed))
+
+		for _, value := range typed {
+			values = append(values, intFromAny(value, 0))
+		}
+
+		return values
+	default:
+		return nil
 	}
 }

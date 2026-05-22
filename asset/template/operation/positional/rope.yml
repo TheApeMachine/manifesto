@@ -9,6 +9,9 @@ inputs:
   - name: x
     type: tensor
     description: Input [batch, num_heads, seq_len, head_dim]
+  - name: position
+    type: tensor
+    description: Optional int32 sequence position offset supplied by the manifest
 outputs:
   - name: y
     type: tensor

@@ -106,6 +106,56 @@ func TestShapeInferencer_Apply(t *testing.T) {
 	})
 }
 
+func TestShapeInferencer_PagedStateOps(t *testing.T) {
+	convey.Convey("Given a topology with generic paged state atoms", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{"page_storage", "new_page_values", "page_table"},
+			Nodes: []ast.Node{
+				{
+					ID:  "write",
+					Op:  "state.page_write",
+					In:  []string{"page_storage", "new_page_values", "page_table"},
+					Out: []string{"updated_pages"},
+					Config: map[string]any{
+						"storage_shape": []any{16, 4, 8, 64},
+					},
+				},
+				{
+					ID:  "gather",
+					Op:  "state.page_gather",
+					In:  []string{"updated_pages", "page_table"},
+					Out: []string{"visible_values"},
+					Config: map[string]any{
+						"length": 7,
+						"shape":  []any{16, 4, 8, 64},
+					},
+				},
+				{
+					ID:  "tail",
+					Op:  "shape.slice",
+					In:  []string{"visible_values"},
+					Out: []string{"tail_values"},
+					Config: map[string]any{
+						"dim":   0,
+						"start": 6,
+						"end":   7,
+					},
+				},
+			},
+		}
+		lowerer := NewLowerer()
+
+		convey.Convey("It should infer storage and logical view shapes", func() {
+			graph, err := lowerer.Topology(topology, dtype.Float32)
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(graph.Nodes[0].ValueType.Shape, convey.ShouldResemble, []int64{16, 4, 8, 64})
+			convey.So(graph.Nodes[1].ValueType.Shape, convey.ShouldResemble, []int64{7, 8, 64})
+			convey.So(graph.Nodes[2].ValueType.Shape, convey.ShouldResemble, []int64{1, 8, 64})
+		})
+	})
+}
+
 func TestLowerer_Topology(t *testing.T) {
 	convey.Convey("Given an expanded topology", t, func() {
 		topology := &ast.Topology{
