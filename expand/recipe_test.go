@@ -119,4 +119,31 @@ func TestRecipe_Topology(t *testing.T) {
 			convey.So(topology.Nodes[1].Out[0], convey.ShouldEqual, "h_7")
 		})
 	})
+
+	convey.Convey("Given a topology node with shape arrays in config", t, func() {
+		expander := NewRecipe(nil)
+		topology := &ast.Topology{
+			Inputs: []string{"latents"},
+			Nodes: []ast.Node{
+				{
+					ID:  "vae.unpack.grid",
+					Op:  "shape.reshape",
+					In:  []string{"latents"},
+					Out: []string{"packed_grid"},
+					Config: map[string]any{
+						"shape": []any{1, "${packed_side}", "${packed_side}", 128},
+					},
+				},
+			},
+		}
+
+		convey.Convey("It should interpolate every shape dimension", func() {
+			expanded, err := expander.ExpandTopologyWithVariables(topology, map[string]any{
+				"packed_side": 16,
+			})
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(expanded.Nodes[0].Config["shape"], convey.ShouldResemble, []any{1, 16, 16, 128})
+		})
+	})
 }

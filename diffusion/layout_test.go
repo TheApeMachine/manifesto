@@ -13,6 +13,7 @@ func TestComputeLatentLayout(t *testing.T) {
 		convey.Convey("It should derive packed token topology", func() {
 			convey.So(err, convey.ShouldBeNil)
 			convey.So(layout.ImageSeqLen, convey.ShouldEqual, 256)
+			convey.So(layout.LatentSide, convey.ShouldEqual, 16)
 			convey.So(layout.VAESpatial, convey.ShouldEqual, 32)
 			convey.So(layout.PackedChannels, convey.ShouldEqual, 128)
 		})

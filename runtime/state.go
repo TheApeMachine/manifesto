@@ -215,6 +215,22 @@ func (store *StateStore) ResolveReference(reference string) (any, error) {
 	return value, nil
 }
 
+/*
+AllSlots returns a snapshot of current state slot values.
+*/
+func (store *StateStore) AllSlots() map[string]any {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	snapshot := make(map[string]any, len(store.slots))
+
+	for name, value := range store.slots {
+		snapshot[name] = value
+	}
+
+	return snapshot
+}
+
 func closeReplacedStateValue(previous any, next any) {
 	previousTensor, previousIsTensor := previous.(tensor.Tensor)
 	nextTensor, nextIsTensor := next.(tensor.Tensor)

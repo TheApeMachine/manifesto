@@ -47,6 +47,8 @@ func (executor *Executor) runPrepareLatents(
 				_ = latents.Close()
 				return err
 			}
+
+			continue
 		}
 
 		values[name] = latents

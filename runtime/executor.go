@@ -104,7 +104,7 @@ func (executor *Executor) Run(
 		values[key] = value
 	}
 
-	defer closeRuntimeValues(values, executor.initialValues)
+	defer executor.closeRuntimeValues(values)
 
 	for _, step := range program.Steps {
 		if err := executor.runStep(ctx, step, graphs, compute, values); err != nil {
@@ -484,8 +484,11 @@ func (executor *Executor) runAxpy(
 
 	for _, ref := range step.Out {
 		if strings.HasPrefix(ref, "state.") && executor.state != nil {
-			name := ref[len("state."):]
-			executor.state.Set(name, updated)
+			if err := executor.state.SetReference(ref, updated); err != nil {
+				return err
+			}
+
+			continue
 		}
 
 		setRuntimeValue(values, ref, updated)
@@ -1055,16 +1058,44 @@ func setRuntimeValue(values map[string]any, ref string, value any) {
 	values[ref] = value
 }
 
-func closeRuntimeValues(values map[string]any, initialValues map[string]any) {
+func (executor *Executor) closeRuntimeValues(values map[string]any) {
+	stateTensors := executor.stateTensorSet()
+
 	for ref, value := range values {
-		if initialValues != nil {
-			if _, ok := initialValues[ref]; ok {
+		if executor.initialValues != nil {
+			if _, ok := executor.initialValues[ref]; ok {
 				continue
 			}
 		}
 
+		tensorValue, ok := value.(tensor.Tensor)
+
+		if ok && tensorValue != nil && stateTensors[tensorValue] {
+			continue
+		}
+
 		closeRuntimeValue(value)
 	}
+}
+
+func (executor *Executor) stateTensorSet() map[tensor.Tensor]bool {
+	owned := make(map[tensor.Tensor]bool)
+
+	if executor.state == nil {
+		return owned
+	}
+
+	for _, value := range executor.state.AllSlots() {
+		tensorValue, ok := value.(tensor.Tensor)
+
+		if !ok || tensorValue == nil {
+			continue
+		}
+
+		owned[tensorValue] = true
+	}
+
+	return owned
 }
 
 func closeRuntimeValue(value any) {

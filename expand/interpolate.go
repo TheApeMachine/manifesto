@@ -69,6 +69,14 @@ func (expander *Recipe) interpolateValue(value any, variables map[string]any) an
 		return expander.interpolateTextValue(typed, variables)
 	case map[string]any:
 		return expander.interpolateMap(typed, variables)
+	case []any:
+		items := make([]any, len(typed))
+
+		for index, item := range typed {
+			items[index] = expander.interpolateValue(item, variables)
+		}
+
+		return items
 	default:
 		return value
 	}
