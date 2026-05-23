@@ -432,6 +432,8 @@ func (compiler *Compiler) compileModelDocument(
 				return nil, nil, bindErr
 			}
 
+			executionDType = applyExecutionDTypeFromConfigOrWeights(nil, graph, executionDType)
+
 			if graph.Metadata == nil {
 				graph.Metadata = make(map[string]any)
 			}
@@ -532,6 +534,8 @@ func (compiler *Compiler) compileFromSafeTensors(
 	if bindErr != nil {
 		return nil, nil, bindErr
 	}
+
+	executionDType = applyExecutionDTypeFromConfigOrWeights(config, graph, executionDType)
 
 	if graph.Metadata == nil {
 		graph.Metadata = make(map[string]any)

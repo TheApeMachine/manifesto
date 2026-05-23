@@ -196,6 +196,8 @@ func (compiler *Compiler) compileComponent(
 		return nil, nil, bindErr
 	}
 
+	executionDType = applyExecutionDTypeFromConfigOrWeights(config, graph, executionDType)
+
 	computeGraph, err := compiler.compute.Graph(graph)
 
 	if err != nil {
