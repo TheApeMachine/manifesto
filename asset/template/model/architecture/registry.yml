@@ -2,6 +2,9 @@ architectures:
   AutoencoderKLFlux2:
     include: model.diffusion.flux-2-klein-4b-vae-decoder
 
+  Qwen3ForCausalLM:
+    include: model.diffusion.flux-2-klein-4b-text-encoder
+
   Flux2Transformer2DModel:
     include: model.architecture.flux2
     variables:

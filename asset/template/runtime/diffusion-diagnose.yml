@@ -2,52 +2,44 @@ kind: program
 name: diffusion-diagnose
 category: runtime
 
+variables:
+  width: 256
+  height: 256
+  seed: 1337
+  num_inference_steps: 4
+  max_sequence_length: 512
+
 include:
-  flux2klein: model.diffusion.flux-2-klein-4b
+  flux2klein: hf://black-forest-labs/FLUX.2-klein-4B
 
 state:
   - name: latents
     type: tensor
     init: runtime
-    config:
-      dtype: bf16
   - name: prompt_embeds
     type: tensor
-    shape: [1, 1024, 7680]
-    config:
-      dtype: bf16
-
-schedulers:
-  scheduler:
-    type: flux2klein.system.runtime.scheduler.type
-    config:
-      steps: flux2klein.system.runtime.scheduler.num_inference_steps
-      num_train_timesteps: flux2klein.system.runtime.scheduler.num_train_timesteps
-      shift: flux2klein.system.runtime.scheduler.shift
-      use_dynamic_shifting: flux2klein.system.runtime.scheduler.use_dynamic_shifting
-      time_shift_type: flux2klein.system.runtime.scheduler.time_shift_type
+    init: runtime
 
 main:
   - op: diffusion.prepare_latents
     config:
-      width: flux2klein.system.runtime.generation.width
-      height: flux2klein.system.runtime.generation.height
-      seed: flux2klein.system.runtime.generation.seed
-      latent_downsample: flux2klein.system.runtime.generation.latent_downsample
-      latent_channels: flux2klein.system.runtime.generation.latent_channels
-      dtype: bf16
-      scheduler: scheduler
+      width: ${width}
+      height: ${height}
+      seed: ${seed}
+      latent_downsample: flux2klein.system.components.vae.latent_downsample
+      latent_channels: flux2klein.system.components.transformer.config.in_channels
     out:
       latents: state.latents
+      latent_ids: state.latent_ids
 
   - in: prompt
     op: tokenizer.encode
     config:
-      tokenizer: flux2klein.system.runtime.tokenizer.source
-      tokenizer_file: flux2klein.system.runtime.tokenizer.file
+      tokenizer: flux2klein.system.pipeline.source
+      tokenizer_file: tokenizer/tokenizer.json
       apply_chat_template: true
-      max_length: 1024
-      pad_token_id: 151643
+      max_length: ${max_sequence_length}
+      pad_token_id: flux2klein.system.components.tokenizer.pad_token_id
     out: input_ids
 
   - in:
@@ -58,6 +50,4 @@ main:
       prompt_embeds: state.prompt_embeds
 
   - op: scheduler.timesteps
-    config:
-      scheduler: scheduler
     out: timesteps

@@ -11,6 +11,7 @@ import (
 	"github.com/theapemachine/manifesto/compiler"
 	"github.com/theapemachine/manifesto/resolve"
 	"github.com/theapemachine/manifesto/tensor"
+	"github.com/theapemachine/manifesto/types"
 )
 
 /*
@@ -18,6 +19,7 @@ Orchestrator compiles and runs one manifest program end-to-end.
 */
 type Orchestrator struct {
 	hub           resolve.Hub
+	parser        func(archive []byte) (types.Parser, error)
 	compute       Backend
 	host          HostOps
 	stateMemory   tensor.Backend
@@ -31,6 +33,7 @@ OrchestratorOptions configures an Orchestrator.
 */
 type OrchestratorOptions struct {
 	Hub           resolve.Hub
+	Parser        func(archive []byte) (types.Parser, error)
 	Compute       Backend
 	Host          HostOps
 	StateMemory   tensor.Backend
@@ -45,6 +48,10 @@ NewOrchestrator constructs an Orchestrator from host-provided dependencies.
 func NewOrchestrator(options OrchestratorOptions) (*Orchestrator, error) {
 	if options.Hub == nil {
 		return nil, fmt.Errorf("runtime orchestrator: hub is required")
+	}
+
+	if options.Parser == nil {
+		return nil, fmt.Errorf("runtime orchestrator: parser is required")
 	}
 
 	if options.Compute == nil {
@@ -63,6 +70,7 @@ func NewOrchestrator(options OrchestratorOptions) (*Orchestrator, error) {
 
 	return &Orchestrator{
 		hub:           options.Hub,
+		parser:        options.Parser,
 		compute:       options.Compute,
 		host:          options.Host,
 		stateMemory:   options.StateMemory,
@@ -82,10 +90,11 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 		return fmt.Errorf("runtime orchestrator: read program %q: %w", programPath, err)
 	}
 
-	manifestCompiler, err := compiler.NewCompiler(compiler.Options{
-		Catalog: catalog.NewFS(asset.TemplateFS()),
-		Hub:     orchestrator.hub,
-	})
+	manifestCompiler, err := compiler.NewCompiler(
+		ctx,
+		compiler.NewPool(catalog.NewFS(asset.TemplateFS()), orchestrator.hub),
+		orchestrator.parser,
+	)
 
 	if err != nil {
 		return fmt.Errorf("runtime orchestrator: new compiler: %w", err)

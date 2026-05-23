@@ -37,6 +37,10 @@ func TestFlowMatchEulerDiscreteDelta(testingObject *testing.T) {
 		scheduler, err := NewFlowMatchEulerDiscrete(SchedulerConfig{
 			Steps:             4,
 			NumTrainTimesteps: 1000,
+			Shift:             1,
+			UseDynamicShift:   false,
+			TimeShiftType:     "exponential",
+			ImageSeqLen:       4096,
 		})
 
 		convey.So(err, convey.ShouldBeNil)

@@ -60,14 +60,15 @@ func (session *ProgramSession) RunSteps(
 	}
 
 	executor := NewExecutor(ExecutorOptions{
-		Backend:       session.backend,
-		Host:          session.host,
-		State:         session.state,
-		StateMemory:   session.stateMemory,
-		Schedulers:    session.schedulers,
-		Plans:         session.plans,
-		Stdin:         session.stdin,
-		InitialValues: initial,
+		Backend:        session.backend,
+		Host:           session.host,
+		State:          session.state,
+		StateMemory:    session.stateMemory,
+		Schedulers:     session.schedulers,
+		ExecutionDType: session.executionDType,
+		Plans:          session.plans,
+		Stdin:          session.stdin,
+		InitialValues:  initial,
 	})
 
 	computeAny := make(map[string]any, len(session.compute))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
@@ -16,31 +17,33 @@ import (
 ProgramSession owns program-runtime state for an already compiled program.
 */
 type ProgramSession struct {
-	program     *ast.Program
-	graphs      map[string]*ast.Graph
-	compute     map[string]*ir.Graph
-	plans       map[string]*ExecutionPlan
-	backend     Backend
-	host        HostOps
-	state       *StateStore
-	stateMemory tensor.Backend
-	schedulers  map[string]*FlowMatchEulerDiscrete
-	stdin       io.Reader
+	program        *ast.Program
+	graphs         map[string]*ast.Graph
+	compute        map[string]*ir.Graph
+	plans          map[string]*ExecutionPlan
+	backend        Backend
+	host           HostOps
+	state          *StateStore
+	stateMemory    tensor.Backend
+	schedulers     map[string]*FlowMatchEulerDiscrete
+	executionDType dtype.DType
+	stdin          io.Reader
 }
 
 /*
 ProgramSessionOptions wires host-provided dependencies into manifesto runtime.
 */
 type ProgramSessionOptions struct {
-	Program      *ast.Program
-	Graphs       map[string]*ast.Graph
-	Compute      map[string]*ir.Graph
-	Backend      Backend
-	Host         HostOps
-	State        *StateStore
-	Schedulers   map[string]*FlowMatchEulerDiscrete
-	Stdin        io.Reader
-	StateBackend tensor.Backend
+	Program        *ast.Program
+	Graphs         map[string]*ast.Graph
+	Compute        map[string]*ir.Graph
+	Backend        Backend
+	Host           HostOps
+	State          *StateStore
+	Schedulers     map[string]*FlowMatchEulerDiscrete
+	ExecutionDType dtype.DType
+	Stdin          io.Reader
+	StateBackend   tensor.Backend
 }
 
 /*
@@ -89,17 +92,28 @@ func NewProgramSession(options ProgramSessionOptions) (*ProgramSession, error) {
 		return nil, err
 	}
 
+	executionDType := options.ExecutionDType
+
+	if !executionDType.IsFloat() {
+		executionDType = RuntimeExecutionDType(options.Graphs)
+	}
+
+	if !executionDType.IsFloat() {
+		return nil, fmt.Errorf("runtime session: execution dtype could not be resolved from compiled graphs")
+	}
+
 	return &ProgramSession{
-		program:     options.Program,
-		graphs:      options.Graphs,
-		compute:     options.Compute,
-		plans:       plans,
-		backend:     options.Backend,
-		host:        options.Host,
-		state:       state,
-		stateMemory: options.StateBackend,
-		schedulers:  schedulers,
-		stdin:       options.Stdin,
+		program:        options.Program,
+		graphs:         options.Graphs,
+		compute:        options.Compute,
+		plans:          plans,
+		backend:        options.Backend,
+		host:           options.Host,
+		state:          state,
+		stateMemory:    options.StateBackend,
+		schedulers:     schedulers,
+		executionDType: executionDType,
+		stdin:          options.Stdin,
 	}, nil
 }
 
@@ -119,14 +133,15 @@ func (session *ProgramSession) RunWithValues(ctx context.Context, initial map[st
 	}
 
 	executor := NewExecutor(ExecutorOptions{
-		Backend:       session.backend,
-		Host:          session.host,
-		State:         session.state,
-		StateMemory:   session.stateMemory,
-		Schedulers:    session.schedulers,
-		Plans:         session.plans,
-		Stdin:         session.stdin,
-		InitialValues: initial,
+		Backend:        session.backend,
+		Host:           session.host,
+		State:          session.state,
+		StateMemory:    session.stateMemory,
+		Schedulers:     session.schedulers,
+		ExecutionDType: session.executionDType,
+		Plans:          session.plans,
+		Stdin:          session.stdin,
+		InitialValues:  initial,
 	})
 
 	computeAny := make(map[string]any, len(session.compute))
@@ -170,14 +185,13 @@ func SchedulersFromProgram(program *ast.Program) (map[string]*FlowMatchEulerDisc
 	for name, declaration := range program.Schedulers {
 		switch declaration.Type {
 		case "flow_match_euler_discrete":
-			scheduler, err := NewFlowMatchEulerDiscrete(SchedulerConfig{
-				Steps:             intFromAny(declaration.Config["steps"], 28),
-				NumTrainTimesteps: intFromAny(declaration.Config["num_train_timesteps"], 1000),
-				Shift:             float64FromAny(declaration.Config["shift"], 1),
-				UseDynamicShift:   boolFromAny(declaration.Config["use_dynamic_shifting"]),
-				TimeShiftType:     stringFromAny(declaration.Config["time_shift_type"], "exponential"),
-				ImageSeqLen:       intFromAny(declaration.Config["image_seq_len"], 4096),
-			})
+			schedulerConfig, configErr := schedulerConfigFromDeclaration(declaration.Config)
+
+			if configErr != nil {
+				return nil, configErr
+			}
+
+			scheduler, err := NewFlowMatchEulerDiscrete(schedulerConfig)
 
 			if err != nil {
 				return nil, err
@@ -187,6 +201,16 @@ func SchedulersFromProgram(program *ast.Program) (map[string]*FlowMatchEulerDisc
 		default:
 			return nil, fmt.Errorf("runtime session: unsupported scheduler type %q", declaration.Type)
 		}
+	}
+
+	if len(schedulers) == 0 {
+		pipelineSchedulers, err := schedulersFromPipelineIncludes(program)
+
+		if err != nil {
+			return nil, err
+		}
+
+		maps.Copy(schedulers, pipelineSchedulers)
 	}
 
 	return schedulers, nil
@@ -210,7 +234,7 @@ func MaterializeStateTensors(
 	}
 
 	if !storageDType.IsFloat() {
-		storageDType = dtype.Float32
+		return fmt.Errorf("runtime session: execution dtype is required for state materialization")
 	}
 
 	for _, declaration := range declarations {
@@ -220,11 +244,17 @@ func MaterializeStateTensors(
 			continue
 		}
 
+		declarationDType, err := stateStorageDType(declaration, storageDType)
+
+		if err != nil {
+			return err
+		}
+
 		if err := materializeStateTensorByDeclaration(
 			stateStore,
 			declaration,
 			memory,
-			stateStorageDType(declaration, storageDType),
+			declarationDType,
 		); err != nil {
 			return err
 		}
@@ -233,20 +263,20 @@ func MaterializeStateTensors(
 	return nil
 }
 
-func stateStorageDType(declaration ast.StateDeclaration, fallback dtype.DType) dtype.DType {
+func stateStorageDType(declaration ast.StateDeclaration, fallback dtype.DType) (dtype.DType, error) {
 	raw, ok := declaration.Config["dtype"].(string)
 
 	if !ok || raw == "" {
-		return fallback
+		return fallback, nil
 	}
 
 	parsed, err := dtype.Parse(raw)
 
 	if err != nil || !parsed.IsFloat() {
-		return fallback
+		return dtype.Invalid, fmt.Errorf("runtime session: state %q has invalid config dtype %q", declaration.Name, raw)
 	}
 
-	return parsed
+	return parsed, nil
 }
 
 func materializeStateTensorByDeclaration(

@@ -236,7 +236,7 @@ func (resolver *Resolver) ExecutionDType(config map[string]any) (dtype.DType, er
 		return parsed, nil
 	}
 
-	return dtype.Float32, nil
+	return dtype.Invalid, nil
 }
 
 /*

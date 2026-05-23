@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -45,28 +46,30 @@ type GraphCallResult struct {
 Executor runs a manifest program against a backend and host operations.
 */
 type Executor struct {
-	backend       Backend
-	host          HostOps
-	state         *StateStore
-	stateMemory   tensor.Backend
-	schedulers    map[string]*FlowMatchEulerDiscrete
-	plans         map[string]*ExecutionPlan
-	stdin         io.Reader
-	initialValues map[string]any
+	backend        Backend
+	host           HostOps
+	state          *StateStore
+	stateMemory    tensor.Backend
+	schedulers     map[string]*FlowMatchEulerDiscrete
+	executionDType dtype.DType
+	plans          map[string]*ExecutionPlan
+	stdin          io.Reader
+	initialValues  map[string]any
 }
 
 /*
 ExecutorOptions configures program execution.
 */
 type ExecutorOptions struct {
-	Backend       Backend
-	Host          HostOps
-	State         *StateStore
-	StateMemory   tensor.Backend
-	Schedulers    map[string]*FlowMatchEulerDiscrete
-	Plans         map[string]*ExecutionPlan
-	Stdin         io.Reader
-	InitialValues map[string]any
+	Backend        Backend
+	Host           HostOps
+	State          *StateStore
+	StateMemory    tensor.Backend
+	Schedulers     map[string]*FlowMatchEulerDiscrete
+	ExecutionDType dtype.DType
+	Plans          map[string]*ExecutionPlan
+	Stdin          io.Reader
+	InitialValues  map[string]any
 }
 
 /*
@@ -74,14 +77,15 @@ NewExecutor constructs an Executor.
 */
 func NewExecutor(options ExecutorOptions) *Executor {
 	return &Executor{
-		backend:       options.Backend,
-		host:          options.Host,
-		state:         options.State,
-		stateMemory:   options.StateMemory,
-		schedulers:    options.Schedulers,
-		plans:         options.Plans,
-		stdin:         options.Stdin,
-		initialValues: options.InitialValues,
+		backend:        options.Backend,
+		host:           options.Host,
+		state:          options.State,
+		stateMemory:    options.StateMemory,
+		schedulers:     options.Schedulers,
+		executionDType: options.ExecutionDType,
+		plans:          options.Plans,
+		stdin:          options.Stdin,
+		initialValues:  options.InitialValues,
 	}
 }
 
@@ -539,7 +543,7 @@ func (executor *Executor) runSchedulerTimesteps(
 ) error {
 	_ = ctx
 
-	schedulerName, _ := step.Config["scheduler"].(string)
+	schedulerName := schedulerNameFromConfig(step.Config)
 
 	scheduler, err := executor.scheduler(schedulerName)
 
@@ -563,7 +567,7 @@ func (executor *Executor) runSchedulerDelta(
 ) error {
 	_ = ctx
 
-	schedulerName, _ := step.Config["scheduler"].(string)
+	schedulerName := schedulerNameFromConfig(step.Config)
 
 	scheduler, err := executor.scheduler(schedulerName)
 
@@ -582,7 +586,11 @@ func (executor *Executor) runSchedulerDelta(
 			return err
 		}
 
-		delta = scheduler.DeltaForStepIndex(int(float64FromAny(stepIndexValue, 0)))
+		delta, err = scheduler.DeltaForStepIndex(int(float64FromAny(stepIndexValue, 0)))
+
+		if err != nil {
+			return err
+		}
 	}
 
 	if !useStepIndex || stepIndexRef == "" {
@@ -1159,6 +1167,28 @@ func intFromConfig(config map[string]any, key string, fallback int) int {
 	default:
 		return fallback
 	}
+}
+
+func configInt(config map[string]any, key string) (int, error) {
+	value := intFromConfig(config, key, 0)
+
+	if value <= 0 {
+		return 0, fmt.Errorf("config %q is required", key)
+	}
+
+	return value, nil
+}
+
+func configInt64(config map[string]any, key string) (int64, error) {
+	if config == nil {
+		return 0, fmt.Errorf("config %q is required", key)
+	}
+
+	if _, ok := config[key]; !ok {
+		return 0, fmt.Errorf("config %q is required", key)
+	}
+
+	return int64(intFromConfig(config, key, 0)), nil
 }
 
 func intSliceFromConfig(config map[string]any, key string) []int {

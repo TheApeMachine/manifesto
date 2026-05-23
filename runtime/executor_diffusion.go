@@ -7,7 +7,6 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/diffusion"
-	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -22,12 +21,39 @@ func (executor *Executor) runPrepareLatents(
 		return fmt.Errorf("diffusion.prepare_latents: state memory backend is required")
 	}
 
-	width := intFromConfig(step.Config, "width", 0)
-	height := intFromConfig(step.Config, "height", 0)
-	seed := int64(intFromConfig(step.Config, "seed", 1337))
-	latentDownsample := intFromConfig(step.Config, "latent_downsample", 0)
-	packedChannels := intFromConfig(step.Config, "latent_channels", 0)
-	storageDType := diffusionStorageDType(step.Config)
+	width, err := configInt(step.Config, "width")
+
+	if err != nil {
+		return fmt.Errorf("diffusion.prepare_latents: %w", err)
+	}
+
+	height, err := configInt(step.Config, "height")
+
+	if err != nil {
+		return fmt.Errorf("diffusion.prepare_latents: %w", err)
+	}
+
+	seed, err := configInt64(step.Config, "seed")
+
+	if err != nil {
+		return fmt.Errorf("diffusion.prepare_latents: %w", err)
+	}
+
+	latentDownsample, err := configInt(step.Config, "latent_downsample")
+
+	if err != nil {
+		return fmt.Errorf("diffusion.prepare_latents: %w", err)
+	}
+
+	packedChannels, err := configInt(step.Config, "latent_channels")
+
+	if err != nil {
+		return fmt.Errorf("diffusion.prepare_latents: %w", err)
+	}
+
+	if !executor.executionDType.IsFloat() {
+		return fmt.Errorf("diffusion.prepare_latents: execution dtype is required")
+	}
 
 	layout, err := diffusion.ComputeLatentLayout(width, height, latentDownsample, packedChannels)
 
@@ -35,7 +61,7 @@ func (executor *Executor) runPrepareLatents(
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
-	latents, err := uploadPackedLatents(executor.stateMemory, layout, seed, storageDType)
+	latents, latentIDs, err := uploadPackedLatentsWithIDs(executor.stateMemory, layout, seed, executor.executionDType)
 
 	if err != nil {
 		return err
@@ -43,7 +69,13 @@ func (executor *Executor) runPrepareLatents(
 
 	for name, reference := range step.Out {
 		if strings.HasPrefix(reference, "state.") && executor.state != nil {
-			if err := executor.state.SetReference(reference, latents); err != nil {
+			value := any(latents)
+
+			if reference == "state.latent_ids" {
+				value = latentIDs
+			}
+
+			if err := executor.state.SetReference(reference, value); err != nil {
 				_ = latents.Close()
 				return err
 			}
@@ -54,11 +86,25 @@ func (executor *Executor) runPrepareLatents(
 		values[name] = latents
 	}
 
-	if err := executor.bindSchedulerFromLatents(step.Config["scheduler"], latents); err != nil {
+	if err := executor.bindSchedulerImageSeqLen(schedulerNameFromConfig(step.Config), layout.ImageSeqLen); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (executor *Executor) bindSchedulerImageSeqLen(schedulerName string, imageSeqLen int) error {
+	if schedulerName == "" {
+		return nil
+	}
+
+	scheduler, err := executor.scheduler(schedulerName)
+
+	if err != nil {
+		return err
+	}
+
+	return scheduler.SetImageSeqLen(imageSeqLen)
 }
 
 func (executor *Executor) runSchedulerBindLatents(
@@ -86,17 +132,15 @@ func (executor *Executor) runSchedulerBindLatents(
 		return fmt.Errorf("scheduler.bind_latents: latents is %T, expected tensor.Tensor", latentsValue)
 	}
 
-	return executor.bindSchedulerFromLatents(step.Config["scheduler"], latents)
+	return executor.bindSchedulerFromLatents(schedulerNameFromConfig(step.Config), latents)
 }
 
-func (executor *Executor) bindSchedulerFromLatents(schedulerName any, latents tensor.Tensor) error {
-	name, ok := schedulerName.(string)
-
-	if !ok || name == "" {
+func (executor *Executor) bindSchedulerFromLatents(schedulerName string, latents tensor.Tensor) error {
+	if schedulerName == "" {
 		return nil
 	}
 
-	scheduler, err := executor.scheduler(name)
+	scheduler, err := executor.scheduler(schedulerName)
 
 	if err != nil {
 		return err
@@ -108,23 +152,5 @@ func (executor *Executor) bindSchedulerFromLatents(schedulerName any, latents te
 		return fmt.Errorf("scheduler bind latents: expected [batch, seq, channels], got %v", dims)
 	}
 
-	scheduler.SetImageSeqLen(dims[1])
-
-	return nil
-}
-
-func diffusionStorageDType(config map[string]any) dtype.DType {
-	raw, ok := config["dtype"].(string)
-
-	if !ok || raw == "" {
-		return dtype.BFloat16
-	}
-
-	parsed, err := dtype.Parse(raw)
-
-	if err != nil || !parsed.IsFloat() {
-		return dtype.BFloat16
-	}
-
-	return parsed
+	return scheduler.SetImageSeqLen(dims[1])
 }

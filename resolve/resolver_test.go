@@ -29,13 +29,13 @@ func TestResolver_ExecutionDType(t *testing.T) {
 			convey.So(err, convey.ShouldNotBeNil)
 		})
 
-		convey.Convey("It should default to float32 when no dtype is declared", func() {
+		convey.Convey("It should report invalid when no dtype is declared", func() {
 			parsed, err := resolver.ExecutionDType(map[string]any{
 				"num_layers": 12,
 			})
 
 			convey.So(err, convey.ShouldBeNil)
-			convey.So(parsed, convey.ShouldEqual, dtype.Float32)
+			convey.So(parsed, convey.ShouldEqual, dtype.Invalid)
 		})
 	})
 }
