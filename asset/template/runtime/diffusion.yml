@@ -8,9 +8,7 @@ include:
 state:
   - name: latents
     type: tensor
-    shape: [1, 4096, 128]
-    init: gaussian
-    seed: 1337
+    init: runtime
     config:
       dtype: bf16
   - name: step_index
@@ -23,16 +21,27 @@ state:
 
 schedulers:
   scheduler:
-    type: flow_match_euler_discrete
+    type: flux2klein.system.runtime.scheduler.type
     config:
       steps: flux2klein.system.runtime.scheduler.num_inference_steps
-      num_train_timesteps: 1000
-      shift: 3.0
-      use_dynamic_shifting: true
-      time_shift_type: exponential
-      image_seq_len: 4096
+      num_train_timesteps: flux2klein.system.runtime.scheduler.num_train_timesteps
+      shift: flux2klein.system.runtime.scheduler.shift
+      use_dynamic_shifting: flux2klein.system.runtime.scheduler.use_dynamic_shifting
+      time_shift_type: flux2klein.system.runtime.scheduler.time_shift_type
 
 main:
+  - op: diffusion.prepare_latents
+    config:
+      width: flux2klein.system.runtime.generation.width
+      height: flux2klein.system.runtime.generation.height
+      seed: flux2klein.system.runtime.generation.seed
+      latent_downsample: flux2klein.system.runtime.generation.latent_downsample
+      latent_channels: flux2klein.system.runtime.generation.latent_channels
+      dtype: bf16
+      scheduler: scheduler
+    out:
+      latents: state.latents
+
   - in: prompt
     op: tokenizer.encode
     config:

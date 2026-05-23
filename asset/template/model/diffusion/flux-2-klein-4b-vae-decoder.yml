@@ -8,11 +8,11 @@ initial_width: 320
 inputs:
   - name: latents
     type: tensor
-    description: Packed latent tokens [1, 4096, 128] for a 1024x1024 image.
+    description: Packed latent tokens [1, 256, 128] for a 256x256 image.
 outputs:
   - name: image
     type: tensor
-    description: Decoded RGB tensor [1, 3, 1024, 1024].
+    description: Decoded RGB tensor [1, 3, 256, 256].
 
 system:
   runtime:
@@ -30,7 +30,7 @@ system:
         op: shape.reshape
         in: [latents]
         out: [packed_grid]
-        config: { shape: [1, 64, 64, 128] }
+        config: { shape: [1, "${packed_side}", "${packed_side}", 128] }
       - id: vae.unpack.pack_t23
         op: shape.transpose
         in: [packed_grid]
@@ -55,7 +55,7 @@ system:
         op: shape.reshape
         in: [denorm_packed_latent]
         out: [unpatch_grid]
-        config: { shape: [1, 32, 2, 2, 64, 64] }
+        config: { shape: [1, 32, 2, 2, "${packed_side}", "${packed_side}"] }
       - id: vae.unpack.unpatch_t34
         op: shape.transpose
         in: [unpatch_grid]
@@ -75,7 +75,7 @@ system:
         op: shape.reshape
         in: [unpatch_t45]
         out: [latent_image]
-        config: { shape: [1, 32, 128, 128] }
+        config: { shape: [1, 32, "${vae_spatial}", "${vae_spatial}"] }
 
       - id: post_quant_conv
         op: convolution.conv2d
@@ -140,7 +140,7 @@ system:
         op: shape.reshape
         in: [mid_attn_bhwc]
         out: [mid_attn_tokens]
-        config: { shape: [1, 16384, 512] }
+        config: { shape: [1, "${mid_attn_tokens}", 512] }
       - id: decoder.mid_block.attentions.0.to_q
         op: projection.linear
         in: [mid_attn_tokens]
@@ -184,7 +184,7 @@ system:
         op: shape.reshape
         in: [mid_attn_merged]
         out: [mid_attn_flat]
-        config: { shape: [1, 16384, 512] }
+        config: { shape: [1, "${mid_attn_tokens}", 512] }
       - id: decoder.mid_block.attentions.0.to_out.0
         op: projection.linear
         in: [mid_attn_flat]
@@ -194,7 +194,7 @@ system:
         op: shape.reshape
         in: [mid_attn_projected]
         out: [mid_attn_bhwc_restore]
-        config: { shape: [1, 128, 128, 512] }
+        config: { shape: [1, "${vae_spatial}", "${vae_spatial}", 512] }
       - id: mid_attn_nchw_0
         op: shape.transpose
         in: [mid_attn_bhwc_restore]

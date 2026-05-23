@@ -112,6 +112,8 @@ func (store *StateStore) initializeTensor(declaration ast.StateDeclaration) (any
 		}
 
 		return values, nil
+	case "runtime":
+		return nil, nil
 	default:
 		return make([]float32, stateElementCount(declaration.Shape)), nil
 	}

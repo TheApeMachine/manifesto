@@ -11,7 +11,7 @@ inputs:
 outputs:
   - name: prompt_embeds
     type: tensor
-    description: Concatenated hidden states [batch, sequence, 7680].
+    description: Concatenated hidden states [batch, sequence, joint_attention_dim].
 
 system:
   runtime:
@@ -36,61 +36,71 @@ system:
         in: [input_ids]
         out: [h_0]
         config:
-          vocab_size: 151936
-          d_model: 2560
+          vocab_size: ${include.vocab_size}
+          d_model: ${include.hidden_size}
 
-      - repeat: 36
+      - repeat: "${include.num_hidden_layers}"
         index: layer
         template:
           - id: "model.layers.${layer}.input_layernorm"
             op: math.rmsnorm
             in: ["h_${layer}"]
             out: ["input_norm_${layer}"]
-            config: { eps: 1e-06 }
+            config:
+              eps: ${include.eps}
 
           - id: "model.layers.${layer}.self_attn.q_proj"
             op: projection.linear
             in: ["input_norm_${layer}"]
             out: ["q_${layer}"]
-            config: { in_features: 2560, out_features: 4096 }
+            config:
+              in_features: ${include.hidden_size}
+              out_features: ${include.q_proj_out}
 
           - id: "model.layers.${layer}.self_attn.k_proj"
             op: projection.linear
             in: ["input_norm_${layer}"]
             out: ["k_${layer}"]
-            config: { in_features: 2560, out_features: 1024 }
+            config:
+              in_features: ${include.hidden_size}
+              out_features: ${include.kv_proj_out}
 
           - id: "model.layers.${layer}.self_attn.v_proj"
             op: projection.linear
             in: ["input_norm_${layer}"]
             out: ["v_${layer}"]
-            config: { in_features: 2560, out_features: 1024 }
+            config:
+              in_features: ${include.hidden_size}
+              out_features: ${include.kv_proj_out}
 
           - id: "q_heads_${layer}"
             op: shape.view_as_heads
             in: ["q_${layer}"]
             out: ["qh_${layer}"]
-            config: { num_heads: 32 }
+            config:
+              num_heads: ${include.num_attention_heads}
 
           - id: "k_heads_${layer}"
             op: shape.view_as_heads
             in: ["k_${layer}"]
             out: ["kh_${layer}"]
-            config: { num_heads: 8 }
+            config:
+              num_heads: ${include.num_key_value_heads}
 
           - id: "v_heads_${layer}"
             op: shape.view_as_heads
             in: ["v_${layer}"]
             out: ["vh_${layer}"]
-            config: { num_heads: 8 }
+            config:
+              num_heads: ${include.num_key_value_heads}
 
           - id: "rope_q_${layer}"
             op: positional.rope
             in: ["qh_${layer}"]
             out: ["qr_${layer}"]
             config:
-              base: 1000000
-              head_dim: 128
+              base: ${include.rope_theta}
+              head_dim: ${include.head_dim}
               mode: half
 
           - id: "rope_k_${layer}"
@@ -98,8 +108,8 @@ system:
             in: ["kh_${layer}"]
             out: ["kr_${layer}"]
             config:
-              base: 1000000
-              head_dim: 128
+              base: ${include.rope_theta}
+              head_dim: ${include.head_dim}
               mode: half
 
           - id: "model.layers.${layer}.self_attn"
@@ -107,9 +117,9 @@ system:
             in: ["qr_${layer}", "kr_${layer}", "vh_${layer}"]
             out: ["attn_${layer}"]
             config:
-              num_heads: 32
-              num_kv_heads: 8
-              head_dim: 128
+              num_heads: ${include.num_attention_heads}
+              num_kv_heads: ${include.num_key_value_heads}
+              head_dim: ${include.head_dim}
               causal: true
 
           - id: "merge_heads_${layer}"
@@ -121,7 +131,9 @@ system:
             op: projection.linear
             in: ["attn_flat_${layer}"]
             out: ["attn_out_${layer}"]
-            config: { in_features: 4096, out_features: 2560 }
+            config:
+              in_features: ${include.q_proj_out}
+              out_features: ${include.hidden_size}
 
           - id: "attention_residual_${layer}"
             op: math.add
@@ -132,25 +144,31 @@ system:
             op: math.rmsnorm
             in: ["attn_residual_${layer}"]
             out: ["post_norm_${layer}"]
-            config: { eps: 1e-06 }
+            config:
+              eps: ${include.eps}
 
           - id: "model.layers.${layer}.mlp.gate_proj"
             op: projection.linear
             in: ["post_norm_${layer}"]
             out: ["gate_${layer}"]
-            config: { in_features: 2560, out_features: 9728 }
+            config:
+              in_features: ${include.hidden_size}
+              out_features: ${include.intermediate_size}
 
           - id: "model.layers.${layer}.mlp.up_proj"
             op: projection.linear
             in: ["post_norm_${layer}"]
             out: ["up_${layer}"]
-            config: { in_features: 2560, out_features: 9728 }
+            config:
+              in_features: ${include.hidden_size}
+              out_features: ${include.intermediate_size}
 
           - id: "gate_up_${layer}"
             op: shape.concat
             in: ["gate_${layer}", "up_${layer}"]
             out: ["gate_up_${layer}"]
-            config: { dim: 2 }
+            config:
+              dim: 2
 
           - id: "swiglu_${layer}"
             op: activation.swiglu
@@ -161,7 +179,9 @@ system:
             op: projection.linear
             in: ["mlp_${layer}"]
             out: ["mlp_out_${layer}"]
-            config: { in_features: 9728, out_features: 2560 }
+            config:
+              in_features: ${include.intermediate_size}
+              out_features: ${include.hidden_size}
 
           - id: "mlp_residual_${layer}"
             op: math.add
@@ -170,12 +190,14 @@ system:
 
       - id: prompt_embeds_0
         op: shape.concat
-        in: [h_9, h_18]
+        in: ["h_${prompt_layer_a}", "h_${prompt_layer_b}"]
         out: [prompt_embeds_0]
-        config: { dim: 2 }
+        config:
+          dim: 2
 
       - id: prompt_embeds
         op: shape.concat
-        in: [prompt_embeds_0, h_27]
+        in: [prompt_embeds_0, "h_${prompt_layer_c}"]
         out: [prompt_embeds]
-        config: { dim: 2 }
+        config:
+          dim: 2

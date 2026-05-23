@@ -32,6 +32,9 @@ func TestFlux2Transformer2DModel(t *testing.T) {
 			"num_layers":          5,
 			"num_single_layers":   20,
 			"rope_theta":          2000,
+			"context_seq_len":     1024,
+			"latent_seq_len":      256,
+			"latent_side":         16,
 		}
 
 		convey.Convey("It should derive the topology without requiring hidden_size", func() {
@@ -170,6 +173,26 @@ func TestAutoencoderKLFlux2(t *testing.T) {
 	})
 }
 
+func flux2TextEncoderHubVariables() map[string]any {
+	return map[string]any{
+		"hidden_size":         2560,
+		"intermediate_size":   9728,
+		"num_hidden_layers":   36,
+		"num_attention_heads": 32,
+		"num_key_value_heads": 8,
+		"head_dim":            128,
+		"vocab_size":          151936,
+		"rope_theta":          1000000,
+		"rms_norm_eps":        1e-06,
+		"q_proj_out":          4096,
+		"kv_proj_out":         1024,
+		"eps":                 1e-06,
+		"prompt_layer_a":      9,
+		"prompt_layer_b":      18,
+		"prompt_layer_c":      27,
+	}
+}
+
 func TestFlux2TextEncoderSwiGLUShape(t *testing.T) {
 	convey.Convey("Given the FLUX.2 text encoder topology", t, func() {
 		raw, err := ReadFile("model/diffusion/flux-2-klein-4b-text-encoder.yml")
@@ -181,7 +204,10 @@ func TestFlux2TextEncoderSwiGLUShape(t *testing.T) {
 		topology, err := block.TopologyAST()
 		convey.So(err, convey.ShouldBeNil)
 
-		topology, err = expand.NewRecipe(catalog.NewFS(TemplateFS())).ExpandTopology(topology)
+		topology, err = expand.NewRecipe(catalog.NewFS(TemplateFS())).ExpandTopologyWithVariables(
+			topology,
+			flux2TextEncoderHubVariables(),
+		)
 		convey.So(err, convey.ShouldBeNil)
 
 		graph, err := lower.NewLowerer().Topology(topology, dtype.Float32)
@@ -215,7 +241,10 @@ func TestFlux2TextEncoderConcatArity(t *testing.T) {
 		topology, err := block.TopologyAST()
 		convey.So(err, convey.ShouldBeNil)
 
-		topology, err = expand.NewRecipe(catalog.NewFS(TemplateFS())).ExpandTopology(topology)
+		topology, err = expand.NewRecipe(catalog.NewFS(TemplateFS())).ExpandTopologyWithVariables(
+			topology,
+			flux2TextEncoderHubVariables(),
+		)
 		convey.So(err, convey.ShouldBeNil)
 
 		convey.Convey("It should only use binary concat nodes supported by Metal", func() {

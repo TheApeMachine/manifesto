@@ -278,6 +278,10 @@ func materializeStateTensor(
 		return nil
 	}
 
+	if value == nil {
+		return nil
+	}
+
 	if _, ok := value.(tensor.Tensor); ok {
 		return nil
 	}

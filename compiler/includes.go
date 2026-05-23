@@ -67,6 +67,10 @@ func (compiler *Compiler) flattenManifest(
 			return fmt.Errorf("manifest include %q: %w", name, err)
 		}
 
+	if err := compiler.enrichDocumentFromHub(ctx, child, cacheDir); err != nil {
+			return fmt.Errorf("manifest include %q: %w", name, err)
+		}
+
 		includes[name] = child
 	}
 

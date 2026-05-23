@@ -41,7 +41,7 @@ type TopologyNode struct {
 	In       []string       `yaml:"in,omitempty"       json:"in,omitempty"`
 	Out      []string       `yaml:"out,omitempty"      json:"out,omitempty"`
 	Config   map[string]any `yaml:"config,omitempty"   json:"config,omitempty"`
-	Repeat   int            `yaml:"repeat,omitempty"   json:"repeat,omitempty"`
+	Repeat   any            `yaml:"repeat,omitempty"   json:"repeat,omitempty"`
 	Index    string         `yaml:"index,omitempty"    json:"index,omitempty"`
 	Template []TopologyNode `yaml:"template,omitempty" json:"template,omitempty"`
 }

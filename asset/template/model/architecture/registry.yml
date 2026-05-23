@@ -38,9 +38,9 @@ architectures:
           - { literal: 2 }
       rope_theta: { config: rope_theta }
       eps: { config: eps }
-      context_seq_len: { literal: 1024 }
-      latent_seq_len: { literal: 4096 }
-      latent_side: { literal: 64 }
+      context_seq_len: { config: context_seq_len }
+      latent_seq_len: { config: latent_seq_len }
+      latent_side: { config: latent_side }
       joint_terminal_index:
         sum:
           - { config: num_layers }

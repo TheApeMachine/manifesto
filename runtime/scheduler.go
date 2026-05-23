@@ -131,6 +131,19 @@ func (scheduler *FlowMatchEulerDiscrete) empiricalMu() float64 {
 	return slope*float64(scheduler.Steps) + intercept
 }
 
+/*
+SetImageSeqLen updates dynamic-shift scheduling from packed latent token count.
+*/
+func (scheduler *FlowMatchEulerDiscrete) SetImageSeqLen(imageSeqLen int) {
+	if imageSeqLen <= 0 {
+		return
+	}
+
+	scheduler.ImageSeqLen = imageSeqLen
+	scheduler.sigmas = nil
+	scheduler.timesteps = nil
+}
+
 func (scheduler *FlowMatchEulerDiscrete) timeShift(mu float64, sigma float64) float64 {
 	if scheduler.TimeShiftType == "linear" {
 		return mu / (mu + (1/sigma - 1))

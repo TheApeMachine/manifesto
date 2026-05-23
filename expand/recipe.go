@@ -57,11 +57,19 @@ func (expander *Recipe) Topology(
 }
 
 func (expander *Recipe) ExpandTopology(topology *ast.Topology) (*ast.Topology, error) {
+	return expander.ExpandTopologyWithVariables(topology, nil)
+}
+
+func (expander *Recipe) ExpandTopologyWithVariables(
+	topology *ast.Topology,
+	variables map[string]any,
+) (*ast.Topology, error) {
 	if topology == nil {
 		return nil, nil
 	}
 
-	nodes, err := expander.expandNodes(topology.Nodes, nil)
+	nodes, err := expander.expandNodes(topology.Nodes, variables)
+
 	if err != nil {
 		return nil, err
 	}

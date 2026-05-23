@@ -147,8 +147,12 @@ func (executor *Executor) runStep(
 		return executor.runAxpy(ctx, step, values)
 	case "scheduler.timesteps":
 		return executor.runSchedulerTimesteps(ctx, step, values)
+	case "scheduler.bind_latents":
+		return executor.runSchedulerBindLatents(ctx, step, values)
 	case "scheduler.delta":
 		return executor.runSchedulerDelta(ctx, step, values)
+	case "diffusion.prepare_latents":
+		return executor.runPrepareLatents(ctx, step, values)
 	case "state.update":
 		return executor.runStateUpdate(ctx, step)
 	case "control.loop_each":

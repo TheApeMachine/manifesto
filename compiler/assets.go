@@ -120,13 +120,23 @@ func (compiler *Compiler) compileManifestObject(
 		return nil, nil, nil
 	}
 
+	if err := compiler.enrichDocumentFromHub(ctx, document, cacheDir); err != nil {
+		return nil, nil, err
+	}
+
 	raw, err := yaml.Marshal(document)
 
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return compiler.compileAnyManifestDocument(ctx, raw, cacheDir)
+	expandVars, err := diffusionRecipeConfig(document)
+
+	if err != nil {
+		expandVars = nil
+	}
+
+	return compiler.compileAnyManifestDocument(ctx, raw, cacheDir, expandVars)
 }
 
 func (compiler *Compiler) compileNestedManifestObjects(
@@ -149,6 +159,10 @@ func (compiler *Compiler) compileNestedManifestObjects(
 		return nil
 	}
 
+	if err := compiler.enrichDocumentFromHub(ctx, document, cacheDir); err != nil {
+		return err
+	}
+
 	for componentName, value := range runtime {
 		component, ok := value.(map[string]any)
 
@@ -163,7 +177,16 @@ func (compiler *Compiler) compileNestedManifestObjects(
 		}
 
 		graphName := includeName + "." + componentName
-		graph, computeGraph, err := compiler.compileModelInclude(ctx, assetFS, manifestPath, cacheDir)
+		componentVariables := compiler.componentHubVariables(ctx, component, cacheDir)
+		expandVars := mergeComponentExpandVariables(document, component, componentVariables)
+
+		graph, computeGraph, err := compiler.compileModelIncludeWithVariables(
+			ctx,
+			assetFS,
+			manifestPath,
+			cacheDir,
+			expandVars,
+		)
 
 		if err != nil {
 			return newError(graphName, "compile", "nested manifest include", err)
@@ -256,13 +279,30 @@ func (compiler *Compiler) compileModelInclude(
 		}
 	}
 
-	return compiler.compileAnyManifestDocument(ctx, raw, cacheDir)
+	return compiler.compileAnyManifestDocument(ctx, raw, cacheDir, nil)
+}
+
+func (compiler *Compiler) compileModelIncludeWithVariables(
+	ctx context.Context,
+	assetFS fs.FS,
+	includePath string,
+	cacheDir string,
+	expandVars map[string]any,
+) (*ast.Graph, *ir.Graph, error) {
+	raw, err := fs.ReadFile(assetFS, NormalizeIncludePath(includePath))
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("read model include %q: %w", includePath, err)
+	}
+
+	return compiler.compileModelDocument(ctx, raw, cacheDir, expandVars)
 }
 
 func (compiler *Compiler) compileAnyManifestDocument(
 	ctx context.Context,
 	raw []byte,
 	cacheDir string,
+	expandVars map[string]any,
 ) (*ast.Graph, *ir.Graph, error) {
 	graph, computeGraph, err := compiler.compileTopologyDocument(raw)
 
@@ -270,7 +310,7 @@ func (compiler *Compiler) compileAnyManifestDocument(
 		return graph, computeGraph, nil
 	}
 
-	return compiler.compileModelDocument(ctx, raw, cacheDir)
+	return compiler.compileModelDocument(ctx, raw, cacheDir, expandVars)
 }
 
 func (compiler *Compiler) compileTopologyDocument(raw []byte) (*ast.Graph, *ir.Graph, error) {
@@ -331,6 +371,7 @@ func (compiler *Compiler) compileModelDocument(
 	ctx context.Context,
 	raw []byte,
 	cacheDir string,
+	expandVars map[string]any,
 ) (*ast.Graph, *ir.Graph, error) {
 	block, err := parse.BlockModelFromYAML(raw)
 
@@ -341,7 +382,7 @@ func (compiler *Compiler) compileModelDocument(
 	spec := block.FromSafeTensorsSpec()
 
 	if spec != nil {
-		return compiler.compileFromSafeTensors(ctx, spec, cacheDir)
+		return compiler.compileFromSafeTensors(ctx, spec, cacheDir, expandVars)
 	}
 
 	topology, err := block.TopologyAST()
@@ -350,7 +391,7 @@ func (compiler *Compiler) compileModelDocument(
 		return nil, nil, err
 	}
 
-	topology, err = compiler.expander.ExpandTopology(topology)
+	topology, err = compiler.expander.ExpandTopologyWithVariables(topology, expandVars)
 
 	if err != nil {
 		return nil, nil, err
@@ -412,6 +453,7 @@ func (compiler *Compiler) compileFromSafeTensors(
 	ctx context.Context,
 	spec map[string]any,
 	cacheDir string,
+	expandVars map[string]any,
 ) (*ast.Graph, *ir.Graph, error) {
 	repoID, _ := spec["source"].(string)
 
@@ -429,6 +471,36 @@ func (compiler *Compiler) compileFromSafeTensors(
 
 	if config == nil {
 		config = make(map[string]any)
+	}
+
+	if rawVariables, ok := spec["variables"].(map[string]any); ok {
+		config = mergeConfigMaps(config, rawVariables)
+	}
+
+	location := resolve.RepoLocation{
+		RepoID:   repoID,
+		RepoType: resolve.ModelRepo,
+		Revision: "main",
+	}
+
+	filename, _ := spec["file"].(string)
+
+	if filename == "" {
+		filename = "model.safetensors"
+	}
+
+	subfolder := safetensorsSubfolder(filename)
+
+	if subfolder != "" {
+		hubConfig, hubErr := compiler.resolver.ComponentConfig(ctx, location, subfolder, cacheDir)
+
+		if hubErr == nil {
+			config = mergeConfigMaps(hubConfig, config)
+		}
+	}
+
+	if expandVars != nil {
+		config = mergeConfigMaps(config, expandVars)
 	}
 
 	recipe, err := compiler.registry.Recipe(className)
@@ -453,18 +525,6 @@ func (compiler *Compiler) compileFromSafeTensors(
 
 	if err != nil {
 		return nil, nil, err
-	}
-
-	location := resolve.RepoLocation{
-		RepoID:   repoID,
-		RepoType: resolve.ModelRepo,
-		Revision: "main",
-	}
-
-	filename, _ := spec["file"].(string)
-
-	if filename == "" {
-		filename = "model.safetensors"
 	}
 
 	weightPath, bindErr := compiler.bindWeightsFile(ctx, location, cacheDir, filename, graph, recipe.WeightMap)
