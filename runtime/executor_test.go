@@ -380,34 +380,6 @@ func TestSetRuntimeValue(testingObject *testing.T) {
 	})
 }
 
-func TestSchedulersFromProgram(testingObject *testing.T) {
-	convey.Convey("Given a program with a flow match scheduler declaration", testingObject, func() {
-		program := &ast.Program{
-			Schedulers: map[string]ast.SchedulerDeclaration{
-				"scheduler": {
-					Type: "flow_match_euler_discrete",
-					Config: map[string]any{
-						"steps":                50,
-						"num_train_timesteps":  1000,
-						"shift":                3.0,
-						"use_dynamic_shifting": true,
-						"time_shift_type":      "exponential",
-						"image_seq_len":        4096,
-					},
-				},
-			},
-		}
-
-		convey.Convey("It should construct runtime schedulers from declarations", func() {
-			schedulers, err := SchedulersFromProgram(program)
-
-			convey.So(err, convey.ShouldBeNil)
-			convey.So(schedulers, convey.ShouldContainKey, "scheduler")
-			convey.So(schedulers["scheduler"].Timesteps(), convey.ShouldHaveLength, 50)
-		})
-	})
-}
-
 func TestMaterializeStateTensors(testingObject *testing.T) {
 	convey.Convey("Given float32 state values and a BF16 runtime dtype", testingObject, func() {
 		declarations := []ast.StateDeclaration{

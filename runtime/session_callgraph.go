@@ -64,7 +64,6 @@ func (session *ProgramSession) RunSteps(
 		Host:           session.host,
 		State:          session.state,
 		StateMemory:    session.stateMemory,
-		Schedulers:     session.schedulers,
 		ExecutionDType: session.executionDType,
 		Plans:          session.plans,
 		Stdin:          session.stdin,
@@ -104,19 +103,3 @@ func (session *ProgramSession) StateMemory() tensor.Backend {
 	return session.stateMemory
 }
 
-/*
-FlowMatchScheduler returns a named flow-match scheduler from the session.
-*/
-func (session *ProgramSession) FlowMatchScheduler(name string) (*FlowMatchEulerDiscrete, error) {
-	if session == nil {
-		return nil, fmt.Errorf("runtime session: session is required")
-	}
-
-	scheduler, ok := session.schedulers[name]
-
-	if !ok || scheduler == nil {
-		return nil, fmt.Errorf("runtime session: unknown scheduler %q", name)
-	}
-
-	return scheduler, nil
-}

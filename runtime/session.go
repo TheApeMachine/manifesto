@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
@@ -25,7 +24,6 @@ type ProgramSession struct {
 	host           HostOps
 	state          *StateStore
 	stateMemory    tensor.Backend
-	schedulers     map[string]*FlowMatchEulerDiscrete
 	executionDType dtype.DType
 	stdin          io.Reader
 }
@@ -40,7 +38,6 @@ type ProgramSessionOptions struct {
 	Backend        Backend
 	Host           HostOps
 	State          *StateStore
-	Schedulers     map[string]*FlowMatchEulerDiscrete
 	ExecutionDType dtype.DType
 	Stdin          io.Reader
 	StateBackend   tensor.Backend
@@ -76,16 +73,6 @@ func NewProgramSession(options ProgramSessionOptions) (*ProgramSession, error) {
 		}
 	}
 
-	schedulers := options.Schedulers
-
-	if schedulers == nil {
-		schedulers, err = SchedulersFromProgram(options.Program)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	plans, err := ExecutionPlansFromCompute(options.Compute)
 
 	if err != nil {
@@ -111,7 +98,6 @@ func NewProgramSession(options ProgramSessionOptions) (*ProgramSession, error) {
 		host:           options.Host,
 		state:          state,
 		stateMemory:    options.StateBackend,
-		schedulers:     schedulers,
 		executionDType: executionDType,
 		stdin:          options.Stdin,
 	}, nil
@@ -137,7 +123,6 @@ func (session *ProgramSession) RunWithValues(ctx context.Context, initial map[st
 		Host:           session.host,
 		State:          session.state,
 		StateMemory:    session.stateMemory,
-		Schedulers:     session.schedulers,
 		ExecutionDType: session.executionDType,
 		Plans:          session.plans,
 		Stdin:          session.stdin,
@@ -170,50 +155,6 @@ func ExecutionPlansFromCompute(compute map[string]*dag.Graph) (map[string]*Execu
 	}
 
 	return plans, nil
-}
-
-/*
-SchedulersFromProgram constructs runtime schedulers from program declarations.
-*/
-func SchedulersFromProgram(program *ast.Program) (map[string]*FlowMatchEulerDiscrete, error) {
-	schedulers := make(map[string]*FlowMatchEulerDiscrete)
-
-	if program == nil {
-		return schedulers, nil
-	}
-
-	for name, declaration := range program.Schedulers {
-		switch declaration.Type {
-		case "flow_match_euler_discrete":
-			schedulerConfig, configErr := schedulerConfigFromDeclaration(declaration.Config)
-
-			if configErr != nil {
-				return nil, configErr
-			}
-
-			scheduler, err := NewFlowMatchEulerDiscrete(schedulerConfig)
-
-			if err != nil {
-				return nil, err
-			}
-
-			schedulers[name] = scheduler
-		default:
-			return nil, fmt.Errorf("runtime session: unsupported scheduler type %q", declaration.Type)
-		}
-	}
-
-	if len(schedulers) == 0 {
-		pipelineSchedulers, err := schedulersFromPipelineIncludes(program)
-
-		if err != nil {
-			return nil, err
-		}
-
-		maps.Copy(schedulers, pipelineSchedulers)
-	}
-
-	return schedulers, nil
 }
 
 /*

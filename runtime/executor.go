@@ -50,7 +50,6 @@ type Executor struct {
 	host           HostOps
 	state          *StateStore
 	stateMemory    tensor.Backend
-	schedulers     map[string]*FlowMatchEulerDiscrete
 	executionDType dtype.DType
 	plans          map[string]*ExecutionPlan
 	stdin          io.Reader
@@ -65,7 +64,6 @@ type ExecutorOptions struct {
 	Host           HostOps
 	State          *StateStore
 	StateMemory    tensor.Backend
-	Schedulers     map[string]*FlowMatchEulerDiscrete
 	ExecutionDType dtype.DType
 	Plans          map[string]*ExecutionPlan
 	Stdin          io.Reader
@@ -81,7 +79,6 @@ func NewExecutor(options ExecutorOptions) *Executor {
 		host:           options.Host,
 		state:          options.State,
 		stateMemory:    options.StateMemory,
-		schedulers:     options.Schedulers,
 		executionDType: options.ExecutionDType,
 		plans:          options.Plans,
 		stdin:          options.Stdin,
@@ -149,14 +146,6 @@ func (executor *Executor) runStep(
 		return executor.runAppend(step, values)
 	case "math.axpy":
 		return executor.runAxpy(ctx, step, values)
-	case "scheduler.timesteps":
-		return executor.runSchedulerTimesteps(ctx, step, values)
-	case "scheduler.bind_latents":
-		return executor.runSchedulerBindLatents(ctx, step, values)
-	case "scheduler.delta":
-		return executor.runSchedulerDelta(ctx, step, values)
-	case "diffusion.prepare_latents":
-		return executor.runPrepareLatents(ctx, step, values)
 	case "state.update":
 		return executor.runStateUpdate(ctx, step)
 	case "control.loop_each":
@@ -536,113 +525,6 @@ func (executor *Executor) runAppend(step ast.Step, values map[string]any) error 
 	return nil
 }
 
-func (executor *Executor) runSchedulerTimesteps(
-	ctx context.Context,
-	step ast.Step,
-	values map[string]any,
-) error {
-	_ = ctx
-
-	schedulerName := schedulerNameFromConfig(step.Config)
-
-	scheduler, err := executor.scheduler(schedulerName)
-
-	if err != nil {
-		return err
-	}
-
-	timesteps := scheduler.Timesteps()
-
-	for _, ref := range step.Out {
-		values[ref] = timesteps
-	}
-
-	return nil
-}
-
-func (executor *Executor) runSchedulerDelta(
-	ctx context.Context,
-	step ast.Step,
-	values map[string]any,
-) error {
-	_ = ctx
-
-	schedulerName := schedulerNameFromConfig(step.Config)
-
-	scheduler, err := executor.scheduler(schedulerName)
-
-	if err != nil {
-		return err
-	}
-
-	var delta float32
-
-	stepIndexRef, useStepIndex := step.In["step_index"]
-
-	if useStepIndex && stepIndexRef != "" {
-		stepIndexValue, err := executor.resolveValue(stepIndexRef, values)
-
-		if err != nil {
-			return err
-		}
-
-		delta, err = scheduler.DeltaForStepIndex(int(float64FromAny(stepIndexValue, 0)))
-
-		if err != nil {
-			return err
-		}
-	}
-
-	if !useStepIndex || stepIndexRef == "" {
-		timestep := executor.currentTimestep(values)
-		timestepRef := step.In["timestep"]
-
-		if timestepRef != "" {
-			timestepValue, err := executor.resolveValue(timestepRef, values)
-
-			if err != nil {
-				return err
-			}
-
-			timestep = float32(float64FromAny(timestepValue, float64(timestep)))
-		}
-
-		delta = scheduler.Delta(timestep)
-	}
-
-	for _, ref := range step.Out {
-		setRuntimeValue(values, ref, delta)
-	}
-
-	return nil
-}
-
-func (executor *Executor) currentTimestep(values map[string]any) float32 {
-	if executor.state == nil {
-		return 0
-	}
-
-	stepIndex, ok := executor.state.Get("step_index")
-
-	if !ok {
-		return 0
-	}
-
-	counter, ok := stepIndex.(int64)
-
-	if !ok {
-		return 0
-	}
-
-	timesteps, ok := values["timesteps"].([]float32)
-
-	if !ok || int(counter) >= len(timesteps) {
-		return 0
-	}
-
-	return timesteps[counter]
-}
-
 func (executor *Executor) runStateUpdate(ctx context.Context, step ast.Step) error {
 	_ = ctx
 
@@ -881,20 +763,6 @@ func (executor *Executor) resolveValue(reference string, values map[string]any) 
 	}
 
 	return value, nil
-}
-
-func (executor *Executor) scheduler(name string) (*FlowMatchEulerDiscrete, error) {
-	if executor.schedulers == nil {
-		return nil, fmt.Errorf("scheduler %q: no schedulers configured", name)
-	}
-
-	scheduler, ok := executor.schedulers[name]
-
-	if !ok {
-		return nil, fmt.Errorf("scheduler %q: not found", name)
-	}
-
-	return scheduler, nil
 }
 
 func sampleTopK(logits []float32, temperature float32, topK int) int {
@@ -1141,28 +1009,6 @@ func intFromConfig(config map[string]any, key string, fallback int) int {
 	default:
 		return fallback
 	}
-}
-
-func configInt(config map[string]any, key string) (int, error) {
-	value := intFromConfig(config, key, 0)
-
-	if value <= 0 {
-		return 0, fmt.Errorf("config %q is required", key)
-	}
-
-	return value, nil
-}
-
-func configInt64(config map[string]any, key string) (int64, error) {
-	if config == nil {
-		return 0, fmt.Errorf("config %q is required", key)
-	}
-
-	if _, ok := config[key]; !ok {
-		return 0, fmt.Errorf("config %q is required", key)
-	}
-
-	return int64(intFromConfig(config, key, 0)), nil
 }
 
 func intSliceFromConfig(config map[string]any, key string) []int {
