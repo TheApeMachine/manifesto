@@ -643,32 +643,6 @@ func (executor *Executor) currentTimestep(values map[string]any) float32 {
 	return timesteps[counter]
 }
 
-func (executor *Executor) storeSchedulerOutput(
-	step ast.Step,
-	values map[string]any,
-	updated any,
-) {
-	if executor.state != nil && step.In["latents"] != "" {
-		if strings.HasPrefix(step.In["latents"], "state.") {
-			name := step.In["latents"][len("state."):]
-			executor.state.Set(name, updated)
-		}
-	}
-
-	for _, ref := range step.Out {
-		if strings.HasPrefix(ref, "state.") {
-			if executor.state != nil {
-				name := ref[len("state."):]
-				executor.state.Set(name, updated)
-			}
-
-			continue
-		}
-
-		setRuntimeValue(values, ref, updated)
-	}
-}
-
 func (executor *Executor) runStateUpdate(ctx context.Context, step ast.Step) error {
 	_ = ctx
 

@@ -7,8 +7,6 @@ import (
 	"github.com/theapemachine/manifesto/asset"
 	"github.com/theapemachine/manifesto/catalog"
 	"github.com/theapemachine/manifesto/compiler"
-	"github.com/theapemachine/manifesto/resolve"
-	"github.com/theapemachine/manifesto/types"
 )
 
 /*
@@ -17,8 +15,6 @@ CompileProgramFromAsset parses and compiles one program manifest path from the a
 func CompileProgramFromAsset(
 	ctx context.Context,
 	programPath string,
-	hub resolve.Hub,
-	parser func(archive []byte) (types.Parser, error),
 	cacheDir string,
 ) (*compiler.CompileOutput, error) {
 	programYAML, err := asset.ReadFile(programPath)
@@ -27,10 +23,8 @@ func CompileProgramFromAsset(
 		return nil, fmt.Errorf("runtime orchestrator: read program %q: %w", programPath, err)
 	}
 
-	manifestCompiler, err := compiler.NewCompiler(
-		ctx,
-		compiler.NewPool(catalog.NewFS(asset.TemplateFS()), hub),
-		parser,
+	manifestCompiler, err := compiler.NewProgramCompiler(
+		compiler.NewPool(catalog.NewFS(asset.TemplateFS())),
 	)
 
 	if err != nil {

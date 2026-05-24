@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/smartystreets/goconvey/convey"
-	"github.com/theapemachine/manifesto/ir"
+	"github.com/theapemachine/manifesto/ir/dag"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -19,13 +19,13 @@ func TestNewExecutionPlan(testingObject *testing.T) {
 		outputShape, err := tensor.NewShape([]int{2, 4})
 		convey.So(err, convey.ShouldBeNil)
 
-		left := ir.NewNode("left", ir.OpInput, leftShape)
-		right := ir.NewNode("right", ir.OpInput, rightShape)
-		matmulNode := ir.NewNode("matmul", ir.OpMatmul, outputShape)
+		left := dag.NewNode("left", dag.OpInput, leftShape)
+		right := dag.NewNode("right", dag.OpInput, rightShape)
+		matmulNode := dag.NewNode("matmul", dag.OpMatmul, outputShape)
 		matmulNode.AddInput(left)
 		matmulNode.AddInput(right)
 
-		computeGraph := ir.NewGraph()
+		computeGraph := dag.NewGraph()
 		computeGraph.AddNode(left)
 		computeGraph.AddNode(right)
 		computeGraph.AddNode(matmulNode)
@@ -45,13 +45,13 @@ func BenchmarkNewExecutionPlan(benchmark *testing.B) {
 	rightShape, _ := tensor.NewShape([]int{64, 64})
 	outputShape, _ := tensor.NewShape([]int{64, 64})
 
-	left := ir.NewNode("left", ir.OpInput, leftShape)
-	right := ir.NewNode("right", ir.OpInput, rightShape)
-	matmulNode := ir.NewNode("matmul", ir.OpMatmul, outputShape)
+	left := dag.NewNode("left", dag.OpInput, leftShape)
+	right := dag.NewNode("right", dag.OpInput, rightShape)
+	matmulNode := dag.NewNode("matmul", dag.OpMatmul, outputShape)
 	matmulNode.AddInput(left)
 	matmulNode.AddInput(right)
 
-	computeGraph := ir.NewGraph()
+	computeGraph := dag.NewGraph()
 	computeGraph.AddNode(left)
 	computeGraph.AddNode(right)
 	computeGraph.AddNode(matmulNode)

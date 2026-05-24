@@ -3,7 +3,7 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/theapemachine/manifesto/ir"
+	"github.com/theapemachine/manifesto/ir/dag"
 )
 
 /*
@@ -18,7 +18,7 @@ type ExecutionPlan struct {
 /*
 NewExecutionPlan verifies compute IR and derives parallel execution layers.
 */
-func NewExecutionPlan(graphName string, compute *ir.Graph) (*ExecutionPlan, error) {
+func NewExecutionPlan(graphName string, compute *dag.Graph) (*ExecutionPlan, error) {
 	if graphName == "" {
 		return nil, fmt.Errorf("runtime plan: graph name is required")
 	}
@@ -43,7 +43,7 @@ func NewExecutionPlan(graphName string, compute *ir.Graph) (*ExecutionPlan, erro
 		nodeIDs := make([]string, 0, len(layer))
 
 		for _, node := range layer {
-			if node.OpType() == ir.OpInput {
+			if node.OpType() == dag.OpInput {
 				continue
 			}
 

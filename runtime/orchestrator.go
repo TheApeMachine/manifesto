@@ -90,10 +90,8 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 		return fmt.Errorf("runtime orchestrator: read program %q: %w", programPath, err)
 	}
 
-	manifestCompiler, err := compiler.NewCompiler(
-		ctx,
-		compiler.NewPool(catalog.NewFS(asset.TemplateFS()), orchestrator.hub),
-		orchestrator.parser,
+	manifestCompiler, err := compiler.NewProgramCompiler(
+		compiler.NewPool(catalog.NewFS(asset.TemplateFS())),
 	)
 
 	if err != nil {

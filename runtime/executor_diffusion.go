@@ -7,6 +7,7 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/diffusion"
+	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -22,38 +23,31 @@ func (executor *Executor) runPrepareLatents(
 	}
 
 	width, err := configInt(step.Config, "width")
-
 	if err != nil {
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
 	height, err := configInt(step.Config, "height")
-
 	if err != nil {
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
 	seed, err := configInt64(step.Config, "seed")
-
 	if err != nil {
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
 	latentDownsample, err := configInt(step.Config, "latent_downsample")
-
 	if err != nil {
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
 	packedChannels, err := configInt(step.Config, "latent_channels")
-
 	if err != nil {
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
-	if !executor.executionDType.IsFloat() {
-		return fmt.Errorf("diffusion.prepare_latents: execution dtype is required")
-	}
+	storageDType := diffusionStorageDType(step.Config)
 
 	layout, err := diffusion.ComputeLatentLayout(width, height, latentDownsample, packedChannels)
 
@@ -61,7 +55,7 @@ func (executor *Executor) runPrepareLatents(
 		return fmt.Errorf("diffusion.prepare_latents: %w", err)
 	}
 
-	latents, latentIDs, err := uploadPackedLatentsWithIDs(executor.stateMemory, layout, seed, executor.executionDType)
+	latents, err := uploadPackedLatents(executor.stateMemory, layout, seed, storageDType)
 
 	if err != nil {
 		return err
@@ -69,13 +63,7 @@ func (executor *Executor) runPrepareLatents(
 
 	for name, reference := range step.Out {
 		if strings.HasPrefix(reference, "state.") && executor.state != nil {
-			value := any(latents)
-
-			if reference == "state.latent_ids" {
-				value = latentIDs
-			}
-
-			if err := executor.state.SetReference(reference, value); err != nil {
+			if err := executor.state.SetReference(reference, latents); err != nil {
 				_ = latents.Close()
 				return err
 			}
@@ -86,25 +74,11 @@ func (executor *Executor) runPrepareLatents(
 		values[name] = latents
 	}
 
-	if err := executor.bindSchedulerImageSeqLen(schedulerNameFromConfig(step.Config), layout.ImageSeqLen); err != nil {
+	if err := executor.bindSchedulerFromLatents(step.Config["scheduler"], latents); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (executor *Executor) bindSchedulerImageSeqLen(schedulerName string, imageSeqLen int) error {
-	if schedulerName == "" {
-		return nil
-	}
-
-	scheduler, err := executor.scheduler(schedulerName)
-
-	if err != nil {
-		return err
-	}
-
-	return scheduler.SetImageSeqLen(imageSeqLen)
 }
 
 func (executor *Executor) runSchedulerBindLatents(
@@ -132,15 +106,17 @@ func (executor *Executor) runSchedulerBindLatents(
 		return fmt.Errorf("scheduler.bind_latents: latents is %T, expected tensor.Tensor", latentsValue)
 	}
 
-	return executor.bindSchedulerFromLatents(schedulerNameFromConfig(step.Config), latents)
+	return executor.bindSchedulerFromLatents(step.Config["scheduler"], latents)
 }
 
-func (executor *Executor) bindSchedulerFromLatents(schedulerName string, latents tensor.Tensor) error {
-	if schedulerName == "" {
+func (executor *Executor) bindSchedulerFromLatents(schedulerName any, latents tensor.Tensor) error {
+	name, ok := schedulerName.(string)
+
+	if !ok || name == "" {
 		return nil
 	}
 
-	scheduler, err := executor.scheduler(schedulerName)
+	scheduler, err := executor.scheduler(name)
 
 	if err != nil {
 		return err
@@ -152,5 +128,23 @@ func (executor *Executor) bindSchedulerFromLatents(schedulerName string, latents
 		return fmt.Errorf("scheduler bind latents: expected [batch, seq, channels], got %v", dims)
 	}
 
-	return scheduler.SetImageSeqLen(dims[1])
+	scheduler.SetImageSeqLen(dims[1])
+
+	return nil
+}
+
+func diffusionStorageDType(config map[string]any) dtype.DType {
+	raw, ok := config["dtype"].(string)
+
+	if !ok || raw == "" {
+		return dtype.BFloat16
+	}
+
+	parsed, err := dtype.Parse(raw)
+
+	if err != nil || !parsed.IsFloat() {
+		return dtype.BFloat16
+	}
+
+	return parsed
 }

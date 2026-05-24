@@ -9,7 +9,7 @@ import (
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/dtype/convert"
-	"github.com/theapemachine/manifesto/ir"
+	"github.com/theapemachine/manifesto/ir/dag"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -19,7 +19,7 @@ ProgramSession owns program-runtime state for an already compiled program.
 type ProgramSession struct {
 	program        *ast.Program
 	graphs         map[string]*ast.Graph
-	compute        map[string]*ir.Graph
+	compute        map[string]*dag.Graph
 	plans          map[string]*ExecutionPlan
 	backend        Backend
 	host           HostOps
@@ -36,7 +36,7 @@ ProgramSessionOptions wires host-provided dependencies into manifesto runtime.
 type ProgramSessionOptions struct {
 	Program        *ast.Program
 	Graphs         map[string]*ast.Graph
-	Compute        map[string]*ir.Graph
+	Compute        map[string]*dag.Graph
 	Backend        Backend
 	Host           HostOps
 	State          *StateStore
@@ -156,7 +156,7 @@ func (session *ProgramSession) RunWithValues(ctx context.Context, initial map[st
 /*
 ExecutionPlansFromCompute builds cached execution plans for every compute graph.
 */
-func ExecutionPlansFromCompute(compute map[string]*ir.Graph) (map[string]*ExecutionPlan, error) {
+func ExecutionPlansFromCompute(compute map[string]*dag.Graph) (map[string]*ExecutionPlan, error) {
 	plans := make(map[string]*ExecutionPlan, len(compute))
 
 	for graphName, computeGraph := range compute {
