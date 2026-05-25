@@ -22,36 +22,30 @@ TENSOR_BACKEND_REWRITE.md). Do not reorder existing constants.
 */
 type DType uint8
 
+// Explicit literal assignments. The wire encoding depends on these values
+// (snapshot/restore, IPC, dataset on-disk metadata), so every constant gets
+// a hard-coded number. Adding a new dtype means appending to the list with
+// the next free integer — never reordering, never relying on `iota`.
 const (
-	Invalid DType = iota
-
-	// Floating point.
-	Float64
-	Float32
-	Float16
-	BFloat16
-	Float8E4M3
-	Float8E5M2
-
-	// Signed integers.
-	Int64
-	Int32
-	Int16
-	Int8
-	Int4 // packed two-per-byte, little-endian nibble order
-
-	// Unsigned integers.
-	Uint64
-	Uint32
-	Uint16
-	Uint8
-
-	// Boolean. Packed eight-per-byte, little-endian bit order.
-	Bool
-
-	// Complex.
-	Complex64
-	Complex128
+	Invalid    DType = 0
+	Float64    DType = 1
+	Float32    DType = 2
+	Float16    DType = 3
+	BFloat16   DType = 4
+	Float8E4M3 DType = 5
+	Float8E5M2 DType = 6
+	Int64      DType = 7
+	Int32      DType = 8
+	Int16      DType = 9
+	Int8       DType = 10
+	Int4       DType = 11 // packed two-per-byte, little-endian nibble order
+	Uint64     DType = 12
+	Uint32     DType = 13
+	Uint16     DType = 14
+	Uint8      DType = 15
+	Bool       DType = 16 // packed eight-per-byte, little-endian bit order
+	Complex64  DType = 17
+	Complex128 DType = 18
 )
 
 /*

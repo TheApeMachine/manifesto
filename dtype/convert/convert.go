@@ -148,7 +148,9 @@ func BytesToFloat32(source dtype.DType, buf []byte) ([]float32, error) {
 /*
 BytesToBFloat16 converts a byte buffer of the given source dtype into
 a slice of BF16 values. Conversion goes through float32 with
-truncation rounding (the canonical BF16 hardware behaviour).
+round-to-nearest-even narrowing (see dtype.NewBfloat16FromFloat32) so
+the Go scalar path matches the AVX-512 / ARM NEON / Apple Silicon
+hardware BF16 cast.
 */
 func BytesToBFloat16(source dtype.DType, buf []byte) ([]dtype.BF16, error) {
 	float32s, err := BytesToFloat32(source, buf)

@@ -84,6 +84,42 @@ func newArenaHostTensor(
 }
 
 /*
+workspaceSentinel is a permanently-live Arena handle attached to every
+HostTensor handed out by NewAliasedHostTensor. The sentinel is never
+Reset, so its Epoch() stays at 0; tensors created against it carry
+epoch=0 and therefore pass acquireView's freshness check forever.
+
+Why a sentinel rather than `arena: nil`: a nil arena makes HostTensor's
+Close call Release(host.bytes) and hand the buffer back to the slab
+allocator, which is exactly the wrong behaviour for tensors that alias
+storage they don't own (the workspace owns it). Tagging the tensor with
+the sentinel suppresses the Release path through the same branch arena
+tensors already use (see HostTensor.Close).
+*/
+var workspaceSentinel = &Arena{}
+
+/*
+NewAliasedHostTensor wraps an externally-owned byte slice in a HostTensor
+without taking ownership of the backing memory. Close on the returned
+tensor is a no-op; the slice memory must outlive every handle handed
+out from the workspace it was sliced out of.
+
+The runtime workspace planner (puter/execution.Workspace) uses this to
+expose pre-planned port allocations as standard tensor.Tensor handles
+so the dispatcher does not have to special-case workspace-resident
+tensors versus per-call Uploads. shape × dtype must be consistent with
+len(buffer); the constructor does not re-validate (slab-allocated
+workspaces already satisfy this by construction).
+*/
+func NewAliasedHostTensor(shape Shape, asType dtype.DType, buffer []byte) *HostTensor {
+	host := newHostTensor(nil, shape, asType, buffer)
+	host.arena = workspaceSentinel
+	host.epoch = workspaceSentinel.Epoch()
+
+	return host
+}
+
+/*
 Shape returns the tensor's shape.
 */
 func (host *HostTensor) Shape() Shape {
@@ -247,6 +283,26 @@ releaseView is a no-op on the host backend; kept for symmetry with
 device backends where a view may pin GPU memory until released.
 */
 func (host *HostTensor) releaseView() {}
+
+/*
+DispatchPointer returns the unsafe.Pointer the host-side device.Backend
+kernels expect — the address of the first byte of resident storage. The
+returned pointer aliases the tensor's internal buffer; the caller must
+not retain it beyond the tensor's lifetime. Empty tensors return nil so
+callers can short-circuit on zero-length inputs.
+
+Implementing this method satisfies puter/execution.DispatchPointer so
+the runtime dispatcher can route through HostTensor without going via
+Float32Native — which is important for non-Float32 tensors (Int32 token
+indices, packed bit masks, etc.) that have no Float32 view.
+*/
+func (host *HostTensor) DispatchPointer() unsafe.Pointer {
+	if len(host.bytes) == 0 {
+		return nil
+	}
+
+	return unsafe.Pointer(&host.bytes[0])
+}
 
 /*
 RawBytes returns the storage bytes plus the storage dtype. The

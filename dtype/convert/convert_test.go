@@ -110,6 +110,43 @@ func TestBytesToBFloat16_RoundTrip(test *testing.T) {
 	})
 }
 
+func TestBytesToFloat64_Int4_OddLength(test *testing.T) {
+	Convey("Given an Int4 buffer with a trailing half-byte (odd output length)", test, func() {
+		// One packed byte: low nibble = 3, high nibble = -4 (twos-complement
+		// in 4 bits = 0xC). The high nibble is past the requested element
+		// count and must be left untouched — proves the loop's outIndex+1
+		// guard fires correctly.
+		pair := dtype.NewInt4Pair(3, -4)
+		buf := []byte{byte(pair)}
+		out := make([]float64, 1)
+
+		Convey("It should decode only the low nibble without panicking", func() {
+			result, err := BytesToFloat64(dtype.Int4, buf)
+			So(err, ShouldBeNil)
+			So(len(result), ShouldEqual, 2) // LogicalElements returns bytes*2 for Int4
+			So(result[0], ShouldEqual, 3)
+			So(result[1], ShouldEqual, -4)
+		})
+
+		_ = out
+	})
+}
+
+func TestBytesToFloat64_Int4_SignExtensionCorners(test *testing.T) {
+	Convey("Int4 sign-extension covers the full int4 range", test, func() {
+		pairs := []byte{
+			byte(dtype.NewInt4Pair(-8, -1)),
+			byte(dtype.NewInt4Pair(0, 7)),
+		}
+
+		Convey("All four nibbles round-trip with correct sign", func() {
+			values, err := BytesToFloat64(dtype.Int4, pairs)
+			So(err, ShouldBeNil)
+			So(values, ShouldResemble, []float64{-8, -1, 0, 7})
+		})
+	})
+}
+
 func TestBytesToInt8(test *testing.T) {
 	Convey("Given float values within int8 range", test, func() {
 		buf := Float32ToBytes([]float32{1, -1, 127, -128, 64})

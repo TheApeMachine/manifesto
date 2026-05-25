@@ -10,6 +10,7 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
@@ -21,6 +22,27 @@ type Backend interface {
 		ctx context.Context,
 		request GraphCallRequest,
 	) (GraphCallResult, error)
+}
+
+/*
+WorkspaceAttacher is the optional capability a Backend advertises when
+it can consume the planner's WorkspaceLayout. The orchestrator type-
+asserts on this after CompileAssets and, for every compiled graph that
+the planner returned a topology for, calls AttachWorkspace so the
+backend can pre-allocate and pre-resolve per-node tensors before the
+first dispatch.
+
+Backends without workspace support (test mocks, future XLA bridges
+that own their own residency) simply don't implement this interface
+and the orchestrator skips the attach step. Backends that do (the
+puter execution.Backend) get the planner output handed in here.
+*/
+type WorkspaceAttacher interface {
+	AttachWorkspace(
+		graphName string,
+		graph *ast.Graph,
+		topology *ir.Topology,
+	) error
 }
 
 /*

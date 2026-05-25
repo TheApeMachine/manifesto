@@ -212,9 +212,12 @@ func deriveSameAsFirstInput(kind ir.SemanticKind) OutputDeriver {
 }
 
 /*
-deriveEmbeddingOutput materializes [N, D] from a [N] token-index input
-and a [V, D] embedding-table weight. The token-count axis is the input's
-symbol; the hidden-size axis is the weight's second symbol.
+deriveEmbeddingOutput materializes [N, hidden] from a [N] token-index
+input. The hidden dimension comes from the node's `d_model` config
+attribute — that's where the architecture template plants the concrete
+size, e.g. 2048 for Llama-3.2-1B. Reading it directly produces a static
+output dimension so downstream consumers' [N, D] unify against a real
+number instead of an unbound symbol the planner then can't size.
 */
 func deriveEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = bindings
@@ -223,8 +226,21 @@ func deriveEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings i
 		return ir.PortType{}, fmt.Errorf("typer: embedding.token needs one input")
 	}
 
+	hiddenSize := configInt64(node, "d_model")
+
+	if hiddenSize == 0 {
+		hiddenSize = configInt64(node, "hidden_size")
+	}
+
+	if hiddenSize == 0 {
+		return ir.PortType{}, fmt.Errorf(
+			"typer: embedding.token %q requires a d_model (or hidden_size) config attribute",
+			node.ID,
+		)
+	}
+
 	tokenDim := inputs[0].ShapeSchema.Dimensions
-	hiddenDim := ir.Dimension{Symbol: "D"}
+	hiddenDim := ir.Dimension{Static: hiddenSize}
 
 	return ir.PortType{
 		DType: dtype.Float32,
@@ -237,9 +253,18 @@ func deriveEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings i
 }
 
 /*
-deriveLinearOutput resolves [N, D_in] × [D_in, D_out] → [N, D_out]. Linear
-keeps the leading axes of its input and replaces the last dim with the
-weight's output dim symbol.
+deriveLinearOutput resolves [N, in_features] × [in_features, out_features]
+→ [N, out_features]. The output dimension comes from the node's
+`out_features` config attribute — every projection.linear instance in a
+HuggingFace-style architecture template has it baked in (q_proj's
+out_features is hidden_size; k_proj/v_proj's is num_kv_heads * head_dim;
+etc.). Reading it directly keeps each linear's output a unique static
+size so the planner can size every intermediate distinctly.
+
+Using a shared "D_out" symbol — the previous implementation's
+behaviour — was a bug: Llama's three attention projections produce
+different output sizes (2048, 512, 512) yet would unify against the
+same symbol, which the typer can't reconcile.
 */
 func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = bindings
@@ -254,8 +279,17 @@ func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 		return ir.PortType{}, fmt.Errorf("typer: projection.linear input has rank 0")
 	}
 
+	outFeatures := configInt64(node, "out_features")
+
+	if outFeatures == 0 {
+		return ir.PortType{}, fmt.Errorf(
+			"typer: projection.linear %q requires an out_features config attribute",
+			node.ID,
+		)
+	}
+
 	prefix := append([]ir.Dimension(nil), leading[:len(leading)-1]...)
-	outDim := ir.Dimension{Symbol: "D_out"}
+	outDim := ir.Dimension{Static: outFeatures}
 
 	return ir.PortType{
 		DType:       dtype.Float32,
@@ -344,4 +378,50 @@ func deriveReshapeOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.
 	}
 
 	return result, nil
+}
+
+/*
+configInt64 reads a node config attribute as an int64. YAML parses
+unquoted integer values as int, but template substitution and other
+paths sometimes deliver int64 / float64 / json.Number, so the helper
+accepts any of those and returns 0 (the architecture template's
+"missing" sentinel) when the attribute is absent or non-numeric.
+
+Used by output derivers that need the concrete output dimension a
+HuggingFace-style config baked into the node (out_features, d_model,
+intermediate_size, num_heads * head_dim, …). Picking the value out of
+config here keeps the typer specs free of architecture-specific
+symbolic dimensions that would otherwise stay unbound past the planner.
+*/
+func configInt64(node *ast.GraphNode, key string) int64 {
+	if node == nil || node.Attributes == nil {
+		return 0
+	}
+
+	raw, ok := node.Attributes[key]
+
+	if !ok {
+		return 0
+	}
+
+	switch typed := raw.(type) {
+	case int:
+		return int64(typed)
+	case int32:
+		return int64(typed)
+	case int64:
+		return typed
+	case uint:
+		return int64(typed)
+	case uint32:
+		return int64(typed)
+	case uint64:
+		return int64(typed)
+	case float32:
+		return int64(typed)
+	case float64:
+		return int64(typed)
+	}
+
+	return 0
 }

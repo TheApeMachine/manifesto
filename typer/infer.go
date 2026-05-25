@@ -150,6 +150,7 @@ func unifyNodeInputs(
 		}
 
 		expected := expectedInputType(spec, slotIndex, producerType)
+		expected = adoptProducerShapeWhenWildcard(expected, producerType)
 
 		result, err := ir.Unify(producerType, expected)
 
@@ -167,6 +168,36 @@ func unifyNodeInputs(
 	}
 
 	return bound, edgeErrors
+}
+
+/*
+adoptProducerShapeWhenWildcard implements the typer's "rank-agnostic"
+opt-out: when an OpSpec input declares its shape as the single-symbol
+wildcard [N] (the shape anyTensor() returns), the typer treats it as
+"any shape" and adopts the producer's actual shape before unifying.
+This lets one OpSpec describe elementwise ops that operate on tensors
+of any rank — math.add over [B, T, D] is still elementwise even though
+the spec writes the input as [N].
+
+The rule does not loosen dtype, layout, or kind checks. Only shape is
+adopted.
+*/
+func adoptProducerShapeWhenWildcard(expected, producer ir.PortType) ir.PortType {
+	if !isWildcardShape(expected.ShapeSchema) {
+		return expected
+	}
+
+	expected.ShapeSchema = producer.ShapeSchema
+
+	return expected
+}
+
+func isWildcardShape(shape ir.ShapeSchema) bool {
+	if len(shape.Dimensions) != 1 {
+		return false
+	}
+
+	return shape.Dimensions[0].IsSymbolic() && shape.Dimensions[0].Symbol == "N"
 }
 
 func expectedInputType(spec OpSpec, slotIndex int, fallback ir.PortType) ir.PortType {

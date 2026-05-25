@@ -8,6 +8,7 @@ import (
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/catalog"
 	"github.com/theapemachine/manifesto/codegen"
+	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/ir/dag"
 	"github.com/theapemachine/manifesto/optimizer"
 	"github.com/theapemachine/manifesto/parse"
@@ -24,11 +25,19 @@ type CompileInput struct {
 
 /*
 CompileOutput is the compiled program and named compute graphs.
+
+Workspaces is the planner's output for each graph that was successfully
+typed and planned during CompileAssets. The map is keyed by the same
+graph name CompileOutput.Graphs uses. Empty when the planner is not
+enabled (the default during the staged Phase 1.2 rollout) or when a
+given graph could not be planned (e.g., the typer left an edge with
+dtype.Invalid).
 */
 type CompileOutput struct {
 	Program       *ast.Program
 	Graphs        map[string]*ast.Graph
 	ComputeGraphs map[string]*dag.Graph
+	Workspaces    map[string]*ir.Topology
 }
 
 /*
@@ -59,6 +68,7 @@ type ProgramCompiler struct {
 	skipOptimizer    bool
 	codegenOptions   codegen.EmitOptions
 	skipCodegen      bool
+	plannerBindings  ir.SymbolMap
 }
 
 /*
@@ -180,6 +190,28 @@ func (programCompiler *ProgramCompiler) DisableCodegen() *ProgramCompiler {
 }
 
 /*
+WithPlannerBindings injects runtime-supplied SymbolMap entries (max
+sequence length, max batch size, etc.) into the static memory planner.
+These merge with the typer's edge-unified bindings so PortByteSize can
+size every dynamic dimension at compile time.
+
+The planner itself always runs as part of CompileAssets — it produces
+the workspace layout the runtime executor depends on
+(ARCHITECTURE.md §5.1 / §6). Callers that need to size dynamic
+dimensions must supply bindings here, or the planner will reject the
+graph with an "unbound symbol" diagnostic.
+*/
+func (programCompiler *ProgramCompiler) WithPlannerBindings(bindings ir.SymbolMap) *ProgramCompiler {
+	if programCompiler == nil {
+		return nil
+	}
+
+	programCompiler.plannerBindings = bindings
+
+	return programCompiler
+}
+
+/*
 CompileAssets parses one program manifest, resolves its include directives,
 lowers each included topology into both ast.Graph and dag.Graph
 representations, and returns the assembled CompileOutput.
@@ -250,11 +282,96 @@ func (programCompiler *ProgramCompiler) CompileAssets(
 		computeGraphs[name] = lowered.DAG
 	}
 
+	workspaces, err := programCompiler.runPlanner(graphs)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &CompileOutput{
 		Program:       program,
 		Graphs:        graphs,
 		ComputeGraphs: computeGraphs,
+		Workspaces:    workspaces,
 	}, nil
+}
+
+/*
+runPlanner is the post-typer planner pass. Every typed graph is
+converted into an *ir.Topology via TopologyForPlanning and then planned
+via ir.PlanWorkspace; the resulting topology — with WorkspaceLayout
+populated — is returned keyed by graph name.
+
+The planner is bypassed when the typer was disabled: typing is a hard
+prerequisite (PortByteSize needs Port.Type.DType and ShapeSchema
+populated, both of which the typer fills in), so calling the planner
+on untyped graphs would just throw "dtype Invalid" errors. Tests that
+DisableTyper are exercising structural lowering in isolation and don't
+need workspace output. Production paths (the orchestrator) never
+disable the typer, so this carve-out doesn't affect runtime behaviour.
+
+Caller-supplied bindings are merged with the typer's edge-unified
+bindings so runtime dimension bounds (max_seq_len, max_batch, etc.) and
+compile-time bindings both feed the planner. Conflicts surface as
+panics from mergeSymbolMaps because the typer has already caught any
+contradiction long before the planner sees the graph.
+
+Failures are wrapped with the graph name so the diagnostic points at
+the offending include directly.
+*/
+func (programCompiler *ProgramCompiler) runPlanner(
+	graphs map[string]*ast.Graph,
+) (map[string]*ir.Topology, error) {
+	if programCompiler.skipTyper {
+		return nil, nil
+	}
+
+	workspaces := make(map[string]*ir.Topology, len(graphs))
+
+	for name, graph := range graphs {
+		mergedBindings := mergeSymbolMaps(graph.Bindings, programCompiler.plannerBindings)
+		graph.Bindings = mergedBindings
+
+		topology, err := PlanGraph(graph)
+
+		if err != nil {
+			return nil, fmt.Errorf("compiler: plan graph %q: %w", name, err)
+		}
+
+		workspaces[name] = topology
+	}
+
+	return workspaces, nil
+}
+
+/*
+mergeSymbolMaps returns a new SymbolMap containing every binding from
+both inputs. When the same symbol appears on both sides with the same
+value it's idempotent; conflicting values surface as a panic because the
+typer is supposed to have caught conflicts long before the planner runs
+(see ir.bindSymbol). A panic here means a real invariant violation —
+either the typer missed something or the caller passed bindings that
+contradict the manifest.
+*/
+func mergeSymbolMaps(base, overlay ir.SymbolMap) ir.SymbolMap {
+	merged := make(ir.SymbolMap, len(base)+len(overlay))
+
+	for symbol, value := range base {
+		merged[symbol] = value
+	}
+
+	for symbol, value := range overlay {
+		if existing, ok := merged[symbol]; ok && existing != value {
+			panic(fmt.Sprintf(
+				"compiler: conflicting binding for symbol %q: %d (typer) vs %d (caller)",
+				symbol, existing, value,
+			))
+		}
+
+		merged[symbol] = value
+	}
+
+	return merged
 }
 
 /*
