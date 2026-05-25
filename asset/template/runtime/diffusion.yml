@@ -1,0 +1,137 @@
+kind: program
+name: diffusion
+category: runtime
+
+# Generate an image by iteratively denoising random latents through the FLUX-2
+# transformer denoiser, then decoding the final latents through the VAE.
+#
+# This program is intentionally model-agnostic — every step is an atomic op or
+# a graph.call into a separately-included architecture. To run with a
+# different FLUX-2-shaped checkpoint, swap the include sources below.
+include:
+  transformer: hf://black-forest-labs/FLUX.2-klein-4B#transformer
+  text_encoder: hf://black-forest-labs/FLUX.2-klein-4B#text_encoder
+  vae_decoder: hf://black-forest-labs/FLUX.2-klein-4B#vae
+
+variables:
+  height: 256
+  width: 256
+  num_inference_steps: 4
+  guidance_scale: 1.0
+  in_channels: 128
+  context_seq_len: 1024
+  latent_seq_len: 4096
+  seed: 1337
+  output_path: flux-2-klein-4b.png
+
+state:
+  - name: step_index
+    type: scalar
+    shape: [1]
+    init: zero
+  - name: latents
+    type: tensor
+    shape: [1, 4096, 128]
+  - name: sigmas
+    type: tensor
+    shape: [4]
+  - name: timesteps
+    type: tensor
+    shape: [4]
+  - name: text_embedding
+    type: tensor
+    shape: [1, 1024, 7680]
+
+main:
+  # 1) Read the prompt from stdin.
+  - in: <stdin>
+    op: io.read_line
+    out: user_prompt
+
+  # 2) Tokenize the prompt for the text encoder.
+  - in: user_prompt
+    op: tokenizer.encode
+    config:
+      tokenizer: hf://black-forest-labs/FLUX.2-klein-4B
+      tokenizer_file: tokenizer/tokenizer.json
+      max_length: 1024
+    out: text_ids
+
+  # 3) Encode the prompt to a text embedding via the Qwen3 text encoder.
+  - in:
+      input_ids: text_ids
+    op: graph.call
+    graph: text_encoder
+    out:
+      hidden_state: state.text_embedding
+
+  # 4) Initialize the noise latents from a Gaussian draw.
+  - op: random.normal
+    config:
+      shape: [1, 4096, 128]
+      seed: $variables.seed
+      dtype: bfloat16
+    out: state.latents
+
+  # 5) Build the sigma schedule: linspace(1, 0, num_inference_steps).
+  - op: math.linspace
+    config:
+      start: 1.0
+      stop: 0.0
+      count: $variables.num_inference_steps
+    out: state.sigmas
+
+  # 6) Compute timesteps from sigmas (sigma * num_train_timesteps).
+  - in:
+      x: state.sigmas
+    op: math.scalar_broadcast
+    config:
+      op: mul
+      scalar: 1000.0
+    out: state.timesteps
+
+  # 7) Denoising loop.
+  - repeat: 4
+    steps:
+      - in:
+          latents: state.latents
+          text_embedding: state.text_embedding
+          step_index: state.step_index
+          sigmas: state.sigmas
+          timesteps: state.timesteps
+        op: graph.call
+        graph: transformer
+        out:
+          sample: noise_pred
+
+      - in:
+          y: state.latents
+          x: noise_pred
+          alpha: state.step_index
+        op: math.axpy
+        out: state.latents
+
+      - op: state.update
+        config:
+          target: step_index
+          update: increment
+
+  # 8) Decode the final latents into an image via the VAE decoder.
+  - in:
+      latents: state.latents
+    op: graph.call
+    graph: vae_decoder
+    out:
+      image: decoded_image
+
+  # 9) Write the image to disk.
+  - in:
+      image: decoded_image
+    op: io.write_image
+    config:
+      path: $variables.output_path
+      width: $variables.width
+      height: $variables.height
+      channels: 3
+      layout: channel_planar
+      range: neg_one_one

@@ -1,10 +1,18 @@
 package ast
 
-import "github.com/theapemachine/manifesto/dtype"
+import (
+	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/ir"
+)
 
 /*
 Graph is the manifest-native compute IR produced by lowering a topology.
 manifest/ir lowers this into pkg/backend/compute/ir for execution.
+
+Bindings is populated by the typer pass (Phase 2.2): after every edge
+unifies, it carries the global symbol-to-concrete-size map produced by
+ir.Unify. Downstream stages (memory planner, codegen) read it to
+resolve symbolic shapes.
 */
 type Graph struct {
 	Nodes          []*GraphNode
@@ -12,10 +20,16 @@ type Graph struct {
 	Outputs        map[string]string
 	ExecutionDType dtype.DType
 	Metadata       map[string]any
+	Bindings       ir.SymbolMap
 }
 
 /*
 GraphNode is one lowered operation with resolved attributes.
+
+InputTypes and OutputType are populated by the typer pass (Phase 2.2)
+once unification has resolved every edge. They carry the same PortType
+contract ir.Unify operates on so downstream passes don't have to re-
+derive types from raw shapes.
 */
 type GraphNode struct {
 	ID         string
@@ -25,6 +39,8 @@ type GraphNode struct {
 	Attributes map[string]any
 	Metadata   map[string]any
 	Weights    *BoundWeight
+	InputTypes []ir.PortType
+	OutputType ir.PortType
 }
 
 /*

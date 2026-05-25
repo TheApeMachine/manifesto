@@ -18,28 +18,30 @@ import (
 Orchestrator compiles and runs one manifest program end-to-end.
 */
 type Orchestrator struct {
-	hub           resolve.Hub
-	parser        func(archive []byte) (types.Parser, error)
-	compute       Backend
-	host          HostOps
-	stateMemory   tensor.Backend
-	cacheDir      string
-	stdin         io.Reader
-	initialValues map[string]any
+	hub             resolve.Hub
+	parser          func(archive []byte) (types.Parser, error)
+	compute         Backend
+	host            HostOps
+	stateMemory     tensor.Backend
+	cacheDir        string
+	stdin           io.Reader
+	initialValues   map[string]any
+	includeResolver compiler.IncludeResolver
 }
 
 /*
 OrchestratorOptions configures an Orchestrator.
 */
 type OrchestratorOptions struct {
-	Hub           resolve.Hub
-	Parser        func(archive []byte) (types.Parser, error)
-	Compute       Backend
-	Host          HostOps
-	StateMemory   tensor.Backend
-	CacheDir      string
-	Stdin         io.Reader
-	InitialValues map[string]any
+	Hub             resolve.Hub
+	Parser          func(archive []byte) (types.Parser, error)
+	Compute         Backend
+	Host            HostOps
+	StateMemory     tensor.Backend
+	CacheDir        string
+	Stdin           io.Reader
+	InitialValues   map[string]any
+	IncludeResolver compiler.IncludeResolver
 }
 
 /*
@@ -69,14 +71,15 @@ func NewOrchestrator(options OrchestratorOptions) (*Orchestrator, error) {
 	}
 
 	return &Orchestrator{
-		hub:           options.Hub,
-		parser:        options.Parser,
-		compute:       options.Compute,
-		host:          options.Host,
-		stateMemory:   options.StateMemory,
-		cacheDir:      options.CacheDir,
-		stdin:         stdin,
-		initialValues: options.InitialValues,
+		hub:             options.Hub,
+		parser:          options.Parser,
+		compute:         options.Compute,
+		host:            options.Host,
+		stateMemory:     options.StateMemory,
+		cacheDir:        options.CacheDir,
+		stdin:           stdin,
+		initialValues:   options.InitialValues,
+		includeResolver: options.IncludeResolver,
 	}, nil
 }
 
@@ -96,6 +99,10 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 
 	if err != nil {
 		return fmt.Errorf("runtime orchestrator: new compiler: %w", err)
+	}
+
+	if orchestrator.includeResolver != nil {
+		manifestCompiler = manifestCompiler.WithIncludeResolver(orchestrator.includeResolver)
 	}
 
 	output, err := manifestCompiler.CompileAssets(ctx, compiler.CompileInput{
