@@ -5,6 +5,8 @@
 # Go 1.26 restricts these by default; -checklinkname=0 preserves access.
 LDFLAGS := -ldflags='-checklinkname=0'
 
+DUMP ?= manifesto.txt
+
 # check runs mechanical enforcement of manifest-first contract.
 # See puter/AGENTS.md and puter/GAPS.md §6.5 for the rules.
 check:
@@ -15,3 +17,6 @@ test:
 
 # verify is the gate: banned-pattern check first, then tests.
 verify: check test
+
+dump:
+	python3 "$(CURDIR)/scripts/dump-repo.py" "$(DUMP)"

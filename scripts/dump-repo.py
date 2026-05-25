@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""
+Write a single text file aggregating repository source files for offline review.
+
+Includes only selected extensions, skips Go tests and TypeScript declaration
+files (*.d.ts), skips dotfiles/dotdirs, named noise files, and common
+dependency and build artifact directories.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+SKIP_DIRECTORY_NAMES: frozenset[str] = frozenset(
+    {
+        "__pycache__",
+        "build",
+        "coverage",
+        "dist",
+        "node_modules",
+        "target",
+        "vendor",
+        "venv",
+    }
+)
+
+SKIP_FILE_NAMES: frozenset[str] = frozenset(
+    {
+        "routeTree.gen.ts",
+        "vite.config.ts",
+    }
+)
+
+ALLOWED_SUFFIXES: tuple[str, ...] = (
+    ".go",
+    ".py",
+    ".yml",
+    ".tsx",
+    ".ts",
+    ".s",
+    ".h",
+    ".cu",
+    ".m",
+    ".mm"
+    ".metal",
+    ".metalinc",
+    ".cpp",
+    ".tex",
+    ".c",
+    ".cc",
+    ".cuh"
+)
+
+
+def repository_root(start: Path) -> Path:
+    current = start.resolve()
+
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+
+    return current
+
+
+def collect_relative_paths(root: Path) -> list[str]:
+    matches: list[str] = []
+
+    for dir_path, dir_names, file_names in os.walk(root, topdown=True):
+        dir_names[:] = sorted(
+            directory_name
+            for directory_name in dir_names
+            if not directory_name.startswith(".")
+            and directory_name not in SKIP_DIRECTORY_NAMES
+        )
+
+        for file_name in sorted(file_names):
+            if file_name.startswith("."):
+                continue
+
+            if file_name in SKIP_FILE_NAMES:
+                continue
+
+            if not file_name.endswith(ALLOWED_SUFFIXES):
+                continue
+
+            if file_name.endswith(".d.ts"):
+                continue
+
+            if file_name.endswith("_test.go"):
+                continue
+
+            absolute_file = Path(dir_path) / file_name
+            relative_file = absolute_file.relative_to(root)
+
+            matches.append(relative_file.as_posix())
+
+    matches.sort()
+    return matches
+
+
+def build_path_trie(paths: list[str]) -> dict[str, dict[str, object] | None]:
+    trie: dict[str, dict[str, object] | None] = {}
+
+    for posix_path in paths:
+        components = posix_path.split("/")
+        node = trie
+
+        for index, component in enumerate(components):
+            is_leaf = index == len(components) - 1
+
+            if component not in node:
+                node[component] = None if is_leaf else {}
+
+            entry = node[component]
+
+            if is_leaf:
+                break
+
+            assert isinstance(entry, dict)
+            node = entry
+
+    return trie
+
+
+def format_directory_tree(trie: dict[str, dict[str, object] | None]) -> str:
+    lines: list[str] = ["Directory Structure:", "", "└── ./"]
+
+    def walk(node: dict[str, dict[str, object] | None], prefix: str) -> None:
+        keys = sorted(node.keys())
+
+        for index, name in enumerate(keys):
+            is_last = index == len(keys) - 1
+            branch = "└── " if is_last else "├── "
+            lines.append(f"{prefix}{branch}{name}")
+            child = node[name]
+
+            if isinstance(child, dict) and child:
+                extension = "    " if is_last else "│   "
+                walk(child, prefix + extension)
+
+    walk(trie, "    ")
+    return "\n".join(lines)
+
+
+def file_delimiter(display_path: str) -> str:
+    return f"\n---\n\n---\nFile: {display_path}\n---\n\n"
+
+
+def write_aggregate(output_path: Path, tree_text: str, root: Path, paths: list[str]) -> None:
+    with output_path.open("w", encoding="utf-8", newline="\n") as sink:
+        sink.write(tree_text)
+        sink.write("\n\n")
+
+        for index, relative_posix in enumerate(paths):
+            display_path = f"/{relative_posix}"
+            sink.write(file_delimiter(display_path))
+
+            absolute_path = root / relative_posix
+            raw_bytes = absolute_path.read_bytes()
+
+            try:
+                contents = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError as decode_error:
+                raise RuntimeError(
+                    f"dump-repo: cannot decode UTF-8 for {absolute_path}: {decode_error}"
+                ) from decode_error
+
+            sink.write(contents)
+
+            if index < len(paths) - 1 and not contents.endswith("\n"):
+                sink.write("\n")
+
+
+def main() -> int:
+    output_name = sys.argv[1] if len(sys.argv) > 1 else "code-dump.txt"
+    output_path = Path(output_name)
+
+    if output_path.exists() and output_path.is_dir():
+        print(f"dump-repo: output path {output_path} is a directory", file=sys.stderr)
+
+        return 1
+
+    root = repository_root(Path.cwd())
+    paths = collect_relative_paths(root)
+
+    if not paths:
+        print("dump-repo: no matching files found", file=sys.stderr)
+
+        return 1
+
+    trie = build_path_trie(paths)
+    tree_text = format_directory_tree(trie)
+    write_aggregate(output_path.resolve(), tree_text, root, paths)
+
+    print(f"dump-repo: wrote {len(paths)} files to {output_path.resolve()}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
