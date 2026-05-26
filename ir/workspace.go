@@ -22,6 +22,14 @@ type WorkspaceLayout struct {
 	// produced. Multiple ports whose lifetimes do not overlap may
 	// share the same Offset.
 	Allocations []Interval
+	// Bindings is the SymbolMap the planner consulted when sizing every
+	// port. The downstream workspace materializer needs it to resolve
+	// any symbolic dimension that remains in Port.Type.ShapeSchema —
+	// the planner already used these to compute byte sizes via
+	// PortByteSize, but it does not mutate the schema in place.
+	// Persisting them here keeps materialization deterministic and
+	// avoids re-running the typer just to learn N=4096.
+	Bindings SymbolMap
 }
 
 /*

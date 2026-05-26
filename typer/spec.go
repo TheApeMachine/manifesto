@@ -55,6 +55,15 @@ list mirrors the op coverage of execution.opTable so the typer's view
 and the dispatcher's view of "supported ops" stay in sync.
 */
 var specTable = map[string]OpSpec{
+	// Inputs use the rank-1 "N" wildcard so adoptProducerShapeWhenWildcard
+	// substitutes the producer's actual shape at unification time. The
+	// output deriver then computes the right concrete shape from node
+	// config (out_features, d_model). This avoids the trap of a shared
+	// symbolic dimension ("D", "D_in") that the typer cannot reconcile
+	// when a model uses linears of different widths — e.g. Llama's
+	// gate_proj.in_features == 2048 vs down_proj.in_features ==
+	// intermediate_size_half, which would simultaneously try to bind the
+	// same symbol to two different values.
 	"embedding.token": {
 		Inputs: []ir.PortType{
 			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticTokenIndex},
@@ -66,7 +75,7 @@ var specTable = map[string]OpSpec{
 	},
 	"math.rmsnorm": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N", "D"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D"), Layout: ir.LayoutContiguous},
@@ -75,7 +84,7 @@ var specTable = map[string]OpSpec{
 	},
 	"math.layernorm": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N", "D"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D"), Layout: ir.LayoutContiguous},
@@ -84,7 +93,7 @@ var specTable = map[string]OpSpec{
 	},
 	"projection.linear": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N", "D_in"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D_in", "D_out"), Layout: ir.LayoutContiguous},

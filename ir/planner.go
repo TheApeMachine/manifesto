@@ -61,10 +61,22 @@ func PlanWorkspace(topology *Topology, options PlanWorkspaceOptions) error {
 
 	totalSize, allocated := AllocateOffsets(intervals, options.Align)
 
+	// Persist a copy of the bindings the planner used so downstream
+	// stages (notably execution.Workspace.preBuildTensors) can resolve
+	// any symbolic dim that survives in Port.Type.ShapeSchema. Copy
+	// rather than alias so later callers can't mutate the planner's
+	// snapshot.
+	bindingsCopy := make(SymbolMap, len(options.Bindings))
+
+	for symbol, value := range options.Bindings {
+		bindingsCopy[symbol] = value
+	}
+
 	topology.Workspace = WorkspaceLayout{
 		Size:        totalSize,
 		Align:       options.Align,
 		Allocations: allocated,
+		Bindings:    bindingsCopy,
 	}
 
 	byPortID := make(map[int32]Interval, len(allocated))

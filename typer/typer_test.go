@@ -241,6 +241,43 @@ func TestRunReturnsHardFailureOnRankMismatch(t *testing.T) {
 	})
 }
 
+/*
+TestInferAssignsOutputTypeForUnknownOp guards against the planner crash
+"port id=N: dtype INVALID rejected scalar size: dtype: unsupported
+dtype 0" that surfaces when an unknown op leaves node.OutputType at the
+zero value. The typer's unknown-op branch updates its internal
+producerTypes map but must also write node.OutputType so downstream
+passes (compiler/plan.TopologyForPlanning → ir.PlanWorkspace) see a
+typed output port.
+*/
+func TestInferAssignsOutputTypeForUnknownOp(t *testing.T) {
+	convey.Convey("Given a chain: typed producer → unknown op → typed consumer", t, func() {
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "added", Op: "math.add", Inputs: []string{"x", "x"}},
+				{ID: "reshaped", Op: "shape.brand_new_op_typer_does_not_know", Inputs: []string{"added"}},
+				{ID: "doubled", Op: "math.add", Inputs: []string{"reshaped", "reshaped"}},
+			},
+		}
+
+		_, _, err := Infer(graph)
+		convey.So(err, convey.ShouldBeNil)
+
+		convey.Convey("The unknown op's OutputType is set, not the zero PortType", func() {
+			unknown := graph.Nodes[1]
+			convey.So(unknown.OutputType.DType, convey.ShouldEqual, dtype.Float32)
+		})
+
+		convey.Convey("The downstream typed consumer can still type its inputs", func() {
+			consumer := graph.Nodes[2]
+			convey.So(len(consumer.InputTypes), convey.ShouldEqual, 2)
+			convey.So(consumer.InputTypes[0].DType, convey.ShouldEqual, dtype.Float32)
+			convey.So(consumer.OutputType.DType, convey.ShouldEqual, dtype.Float32)
+		})
+	})
+}
+
 func TestRunBindsSymbolsAcrossGraph(t *testing.T) {
 	convey.Convey("Given a static [4, 8] producer feeding a [N, D] consumer", t, func() {
 		RegisterSpec("test.emit_static48", OpSpec{

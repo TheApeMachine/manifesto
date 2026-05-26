@@ -98,9 +98,15 @@ func Infer(graph *ast.Graph) (InferStats, []EdgeError, error) {
 
 		if !ok {
 			// Unknown ops are not a typer error — the dispatcher will
-			// reject them at execution time. We still propagate the
-			// node's first input type as a best-effort output.
-			producerTypes[node.ID] = bestEffortPassthrough(node, producerTypes)
+			// reject them at execution time if they're really missing.
+			// We still propagate the node's first input type as a
+			// best-effort output, AND we write it back to node.OutputType
+			// so the planner's TopologyForPlanning sees a typed port
+			// (otherwise port.Type stays at the zero PortType and
+			// PortByteSize fails with "unsupported dtype 0").
+			fallback := bestEffortPassthrough(node, producerTypes)
+			node.OutputType = fallback
+			producerTypes[node.ID] = fallback
 			continue
 		}
 
