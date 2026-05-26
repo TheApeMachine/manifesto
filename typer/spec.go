@@ -32,9 +32,9 @@ long-term source of truth; the bridge from those to OpSpec is a separate
 pass and not on the critical path for this stage to be useful.
 */
 type OpSpec struct {
-	Inputs       []ir.PortType
-	Output       ir.PortType
-	WeightTypes  []ir.PortType
+	Inputs        []ir.PortType
+	Output        ir.PortType
+	WeightTypes   []ir.PortType
 	OutputDeriver OutputDeriver
 }
 
@@ -117,6 +117,38 @@ var specTable = map[string]OpSpec{
 	"activation.tanh":    unaryElementwiseSpec(),
 	"activation.gelu":    unaryElementwiseSpec(),
 	"activation.swish":   unaryElementwiseSpec(),
+	"activation.swiglu": {
+		Inputs: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
+		},
+		OutputDeriver: deriveSwiGLUOutput,
+	},
+
+	"shape.view_as_heads": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveViewAsHeadsOutput,
+	},
+	"shape.merge_heads": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveMergeHeadsOutput,
+	},
+	"shape.last_token": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveLastTokenOutput,
+	},
+	"positional.rope": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"attention.gqa": {
+		Inputs: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
 
 	"value.assign": {
 		Inputs:        []ir.PortType{anyTensor()},
@@ -336,6 +368,140 @@ func deriveMatmulOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 	}, nil
 }
 
+func deriveSwiGLUOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) == 2 {
+		return deriveSameAsFirstInput(ir.SemanticHiddenState)(node, inputs, bindings)
+	}
+
+	if len(inputs) != 1 {
+		return ir.PortType{}, fmt.Errorf("typer: activation.swiglu needs one or two inputs")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+
+	if len(dimensions) == 0 {
+		return ir.PortType{}, fmt.Errorf("typer: activation.swiglu input has rank 0")
+	}
+
+	lastValue, err := dimensionInt(dimensions[len(dimensions)-1], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: activation.swiglu last dim: %w", err)
+	}
+
+	if lastValue%2 != 0 {
+		return ir.PortType{}, fmt.Errorf("typer: activation.swiglu last dim %d is not even", lastValue)
+	}
+
+	prefix := append([]ir.Dimension(nil), dimensions[:len(dimensions)-1]...)
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{
+		Dimensions: append(prefix, ir.Dimension{Static: lastValue / 2}),
+	}
+	result.Kind = ir.SemanticHiddenState
+
+	return result, nil
+}
+
+func deriveViewAsHeadsOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.view_as_heads needs one input")
+	}
+
+	numHeads := configInt64(node, "num_heads")
+
+	if numHeads <= 0 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.view_as_heads requires positive num_heads")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+
+	if len(dimensions) == 0 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.view_as_heads input has rank 0")
+	}
+
+	lastValue, err := dimensionInt(dimensions[len(dimensions)-1], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.view_as_heads last dim: %w", err)
+	}
+
+	if lastValue%numHeads != 0 {
+		return ir.PortType{}, fmt.Errorf(
+			"typer: shape.view_as_heads last dim %d is not divisible by %d heads",
+			lastValue, numHeads,
+		)
+	}
+
+	prefix := append([]ir.Dimension(nil), dimensions[:len(dimensions)-1]...)
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{
+		Dimensions: append(
+			prefix,
+			ir.Dimension{Static: numHeads},
+			ir.Dimension{Static: lastValue / numHeads},
+		),
+	}
+
+	return result, nil
+}
+
+func deriveMergeHeadsOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	_ = node
+
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.merge_heads needs one input")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+
+	if len(dimensions) < 2 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.merge_heads input rank must be >= 2")
+	}
+
+	numHeads, err := dimensionInt(dimensions[len(dimensions)-2], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.merge_heads num_heads: %w", err)
+	}
+
+	headDim, err := dimensionInt(dimensions[len(dimensions)-1], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.merge_heads head_dim: %w", err)
+	}
+
+	prefix := append([]ir.Dimension(nil), dimensions[:len(dimensions)-2]...)
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{
+		Dimensions: append(prefix, ir.Dimension{Static: numHeads * headDim}),
+	}
+
+	return result, nil
+}
+
+func deriveLastTokenOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	_ = node
+	_ = bindings
+
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.last_token needs one input")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+
+	if len(dimensions) < 2 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.last_token input rank must be >= 2")
+	}
+
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{
+		Dimensions: append([]ir.Dimension{{Static: 1}}, dimensions[1:]...),
+	}
+
+	return result, nil
+}
+
 func deriveCastOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = bindings
 
@@ -387,6 +553,20 @@ func deriveReshapeOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.
 	}
 
 	return result, nil
+}
+
+func dimensionInt(dimension ir.Dimension, bindings ir.SymbolMap) (int64, error) {
+	if !dimension.IsSymbolic() {
+		return dimension.Static, nil
+	}
+
+	value, ok := bindings[dimension.Symbol]
+
+	if !ok {
+		return 0, fmt.Errorf("symbol %q is unbound", dimension.Symbol)
+	}
+
+	return value, nil
 }
 
 /*

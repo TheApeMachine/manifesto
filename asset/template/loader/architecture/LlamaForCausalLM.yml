@@ -266,7 +266,7 @@ system:
             out:
               - down_proj_${i}
             config:
-              in_features: {{.IntermediateSizeHalf}}
+              in_features: {{.IntermediateSize}}
               out_features: {{.HiddenSize}}
             weights:
               weight: model.layers.${i}.mlp.down_proj.weight
