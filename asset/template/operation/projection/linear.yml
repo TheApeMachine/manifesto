@@ -20,3 +20,23 @@ config:
   - name: out_features
     type: int
     description: Output feature count
+bind:
+  method: Matmul
+  output:
+    shape:
+      - ref: input.x.shape
+        drop_tail: 1
+      - ref: config.out_features.int
+    dtype: input.x.dtype
+  args:
+    - ref: output.y.pointer
+    - ref: input.x.pointer
+    - ref: weight.transposed.pointer
+    - ref: input.x.shape
+      drop_tail: 1
+      product: true
+    - ref: input.x.shape
+      dim: -1
+    - ref: weight.transposed.shape
+      dim: -1
+    - ref: input.x.dtype

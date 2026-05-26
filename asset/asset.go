@@ -33,6 +33,60 @@ type ConfigParam struct {
 }
 
 /*
+BindArg describes one typed value resolved by the execution dispatcher.
+*/
+type BindArg struct {
+	Ref         string `yaml:"ref,omitempty"          json:"ref,omitempty"`
+	Dim         *int   `yaml:"dim,omitempty"          json:"dim,omitempty"`
+	DropTail    int    `yaml:"drop_tail,omitempty"    json:"drop_tail,omitempty"`
+	Product     bool   `yaml:"product,omitempty"      json:"product,omitempty"`
+	ProductTail int    `yaml:"product_tail,omitempty" json:"product_tail,omitempty"`
+	Divisor     int    `yaml:"divisor,omitempty"      json:"divisor,omitempty"`
+	DivisorRef  string `yaml:"divisor_ref,omitempty"  json:"divisor_ref,omitempty"`
+	Value       any    `yaml:"value,omitempty"        json:"value,omitempty"`
+}
+
+/*
+BindOutput declares how to allocate a node output before device dispatch.
+*/
+type BindOutput struct {
+	Shape []BindArg `yaml:"shape" json:"shape"`
+	DType string    `yaml:"dtype" json:"dtype"`
+}
+
+/*
+BindWhen selects a bind variant for operations with multiple signatures.
+*/
+type BindWhen struct {
+	InputCount int `yaml:"input_count" json:"input_count"`
+}
+
+/*
+BindVariant is one executable mapping from an operation schema to a backend
+method or executor intrinsic.
+*/
+type BindVariant struct {
+	When         BindWhen           `yaml:"when,omitempty"          json:"when,omitempty"`
+	Method       string             `yaml:"method,omitempty"        json:"method,omitempty"`
+	ConfigStruct string             `yaml:"config_struct,omitempty" json:"config_struct,omitempty"`
+	ConfigFields map[string]BindArg `yaml:"config_fields,omitempty" json:"config_fields,omitempty"`
+	Output       BindOutput         `yaml:"output,omitempty"        json:"output,omitempty"`
+	Args         []BindArg          `yaml:"args,omitempty"          json:"args,omitempty"`
+}
+
+/*
+Bind describes the executable runtime mapping for an operation.
+*/
+type Bind struct {
+	Method       string             `yaml:"method,omitempty"        json:"method,omitempty"`
+	ConfigStruct string             `yaml:"config_struct,omitempty" json:"config_struct,omitempty"`
+	ConfigFields map[string]BindArg `yaml:"config_fields,omitempty" json:"config_fields,omitempty"`
+	Output       BindOutput         `yaml:"output,omitempty"        json:"output,omitempty"`
+	Args         []BindArg          `yaml:"args,omitempty"          json:"args,omitempty"`
+	Variants     []BindVariant      `yaml:"variants,omitempty"      json:"variants,omitempty"`
+}
+
+/*
 TopologyNode describes a single operation node inside a block's internal wiring.
 */
 type TopologyNode struct {
@@ -76,6 +130,7 @@ type Schema struct {
 	Inputs       []OperationPort `yaml:"inputs"        json:"inputs"`
 	Outputs      []OperationPort `yaml:"outputs"       json:"outputs"`
 	Config       []ConfigParam   `yaml:"config"        json:"config"`
+	Bind         *Bind           `yaml:"bind"          json:"bind,omitempty"`
 	System       *System         `yaml:"system"        json:"system,omitempty"`
 }
 

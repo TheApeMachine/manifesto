@@ -3,13 +3,52 @@ category: activation
 op: activation.swiglu
 name: SwiGLU
 label: SwiGLU
-description: Swish-gated linear unit — splits input in half, gates one half with swish of the other.
+description: Swish-gated linear unit.
 initial_width: 200
 inputs:
-  - name: x
+  - name: gate
     type: tensor
-    description: Input tensor (last dim must be even)
+    description: Gate tensor or packed gate/up tensor
+  - name: up
+    type: tensor
+    description: Optional value tensor for two-input SwiGLU
 outputs:
   - name: y
     type: tensor
-    description: Gated output (half the last dim of x)
+    description: Gated output
+bind:
+  variants:
+    - when:
+        input_count: 1
+      method: SwiGLU
+      output:
+        shape:
+          - ref: input.gate.shape
+            drop_tail: 1
+          - ref: input.gate.shape
+            dim: -1
+            divisor: 2
+        dtype: input.gate.dtype
+      args:
+        - ref: output.y.pointer
+        - ref: input.gate.pointer
+        - ref: input.gate.shape
+          drop_tail: 1
+          product: true
+        - ref: input.gate.shape
+          dim: -1
+          divisor: 2
+        - ref: input.gate.dtype
+    - when:
+        input_count: 2
+      method: SwiGLUTensors
+      output:
+        shape:
+          - ref: input.gate.shape
+        dtype: input.gate.dtype
+      args:
+        - ref: output.y.pointer
+        - ref: input.gate.pointer
+        - ref: input.up.pointer
+        - ref: input.gate.len
+        - ref: input.gate.dtype

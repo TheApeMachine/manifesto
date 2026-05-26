@@ -13,3 +13,15 @@ outputs:
   - name: y
     type: tensor
     description: Output [batch, seq_len, d_model]
+bind:
+  method: shape.merge_heads
+  output:
+    shape:
+      - ref: input.x.shape
+        drop_tail: 2
+      - ref: input.x.shape
+        product_tail: 2
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

@@ -6,10 +6,25 @@ label: Add
 description: Elementwise addition of two tensors.
 initial_width: 180
 inputs:
-  - name: x y
+  - name: x
     type: tensor
-    description: Input tensor
+    description: Left input tensor
+  - name: y
+    type: tensor
+    description: Right input tensor
 outputs:
   - name: z
     type: tensor
     description: Output tensor
+bind:
+  method: Add
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: output.z.pointer
+    - ref: input.x.pointer
+    - ref: input.y.pointer
+    - ref: input.x.len
+    - ref: input.x.dtype

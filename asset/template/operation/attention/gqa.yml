@@ -19,3 +19,43 @@ outputs:
   - name: out
     type: tensor
     description: Attention output — [batch, num_q_heads, seq_len, head_dim]
+config:
+  - name: num_heads
+    type: int
+    description: Number of query heads
+  - name: num_kv_heads
+    type: int
+    description: Number of key/value heads
+  - name: head_dim
+    type: int
+    description: Per-head dimension
+  - name: causal
+    type: bool
+    default: true
+    description: Apply causal masking
+bind:
+  method: MultiHeadAttention
+  config_struct: MultiHeadAttentionConfig
+  config_fields:
+    NumHeads:
+      ref: config.num_heads.int
+    HeadDim:
+      ref: config.head_dim.int
+    Causal:
+      ref: config.causal.bool
+    KVHeadCount:
+      ref: config.num_kv_heads.int
+  output:
+    shape:
+      - ref: input.q.shape
+    dtype: input.q.dtype
+  args:
+    - ref: input.q.pointer
+    - ref: input.k.pointer
+    - ref: input.v.pointer
+    - ref: output.out.pointer
+    - ref: input.q.shape
+      dim: 0
+    - ref: input.k.shape
+      dim: 0
+    - ref: input.q.dtype

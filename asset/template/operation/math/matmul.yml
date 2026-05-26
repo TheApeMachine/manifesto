@@ -16,3 +16,24 @@ outputs:
   - name: c
     type: tensor
     description: Result matrix [M, N]
+bind:
+  method: Matmul
+  output:
+    shape:
+      - ref: input.a.shape
+        drop_tail: 1
+      - ref: input.b.shape
+        dim: -1
+    dtype: input.a.dtype
+  args:
+    - ref: output.c.pointer
+    - ref: input.a.pointer
+    - ref: input.b.pointer
+    - ref: input.a.shape
+      drop_tail: 1
+      product: true
+    - ref: input.a.shape
+      dim: -1
+    - ref: input.b.shape
+      dim: -1
+    - ref: input.a.dtype

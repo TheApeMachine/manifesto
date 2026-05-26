@@ -24,3 +24,21 @@ config:
     type: float
     default: 0.02
     description: Weight initialization std
+bind:
+  method: Lookup
+  output:
+    shape:
+      - ref: input.ids.shape
+      - ref: weight.shape
+        dim: 1
+    dtype: weight.dtype
+  args:
+    - ref: weight.pointer
+    - ref: input.ids.pointer
+    - ref: output.embeds.pointer
+    - ref: weight.shape
+      dim: 0
+    - ref: weight.shape
+      dim: 1
+    - ref: input.ids.len
+    - ref: weight.dtype

@@ -24,3 +24,25 @@ config:
     type: float
     default: 10000
     description: Frequency base
+bind:
+  method: RoPE
+  config_struct: RoPEConfig
+  config_fields:
+    BaseFreq:
+      ref: config.base.float
+    StartPosition:
+      ref: config.start_position.int
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: -2
+    - ref: input.x.shape
+      dim: -1
+    - ref: input.x.dtype

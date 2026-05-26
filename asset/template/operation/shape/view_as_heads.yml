@@ -17,3 +17,17 @@ config:
   - name: num_heads
     type: int
     description: Number of attention heads
+bind:
+  method: shape.view_as_heads
+  output:
+    shape:
+      - ref: input.x.shape
+        drop_tail: 1
+      - ref: config.num_heads.int
+      - ref: input.x.shape
+        dim: -1
+        divisor_ref: config.num_heads.int
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

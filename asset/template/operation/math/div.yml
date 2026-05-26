@@ -1,9 +1,9 @@
 kind: Operation
 category: math
-op: math.mul
-name: Mul
-label: Mul
-description: Elementwise multiplication of two tensors.
+op: math.div
+name: Div
+label: Div
+description: Elementwise division of two tensors.
 initial_width: 180
 inputs:
   - name: x
@@ -17,7 +17,7 @@ outputs:
     type: tensor
     description: Output tensor
 bind:
-  method: Mul
+  method: Div
   output:
     shape:
       - ref: input.x.shape

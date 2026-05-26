@@ -1,0 +1,26 @@
+kind: Operation
+category: shape
+op: shape.last_token
+name: Last Token
+label: Last Token
+description: Selects the final row along the leading sequence dimension.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [seq_len, hidden]
+outputs:
+  - name: y
+    type: tensor
+    description: Output [1, hidden]
+bind:
+  method: shape.last_token
+  output:
+    shape:
+      - value: 1
+      - ref: input.x.shape
+        dim: -1
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

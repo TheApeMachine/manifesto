@@ -13,3 +13,14 @@ outputs:
   - name: y
     type: tensor
     description: Activated output
+bind:
+  method: ReLU
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: output.y.pointer
+    - ref: input.x.pointer
+    - ref: input.x.len
+    - ref: input.x.dtype

@@ -18,3 +18,19 @@ config:
     type: float
     default: 1e-6
     description: Numerical stability epsilon
+bind:
+  method: RMSNorm
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: weight.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      drop_tail: 1
+      product: true
+    - ref: input.x.shape
+      dim: -1
+    - ref: input.x.dtype
