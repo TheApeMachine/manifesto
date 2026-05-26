@@ -72,6 +72,10 @@ func LowerTopology(topology *ast.Topology) (*LoweredGraph, error) {
 		}
 	}
 
+	if err := resolveTopologyOutputs(expanded.Outputs, astGraph, producers); err != nil {
+		return nil, err
+	}
+
 	if err := dagGraph.Verify(); err != nil {
 		return nil, fmt.Errorf("compiler: lower topology: %w", err)
 	}
@@ -167,6 +171,36 @@ func lowerOneNode(
 		if _, exists := producers[outputName]; !exists {
 			producers[outputName] = dagNode
 		}
+	}
+
+	return nil
+}
+
+func resolveTopologyOutputs(
+	outputs map[string]string,
+	astGraph *ast.Graph,
+	producers map[string]*dag.Node,
+) error {
+	for outputName, outputRef := range outputs {
+		if outputName == "" {
+			continue
+		}
+
+		if outputRef == "" {
+			outputRef = outputName
+		}
+
+		producer, ok := producers[outputRef]
+
+		if !ok {
+			return fmt.Errorf(
+				"compiler: lower topology: output %q references unknown value %q",
+				outputName,
+				outputRef,
+			)
+		}
+
+		astGraph.Outputs[outputName] = producer.ID()
 	}
 
 	return nil

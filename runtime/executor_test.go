@@ -318,6 +318,52 @@ func TestExecutorRunLoopCountStopsOnSampleStopToken(testingObject *testing.T) {
 	})
 }
 
+func TestExecutorRunTopKSampleAcceptsTensorLogits(testingObject *testing.T) {
+	convey.Convey("Given top-k sampling with tensor logits", testingObject, func() {
+		shape, err := tensor.NewShape([]int{3})
+		convey.So(err, convey.ShouldBeNil)
+
+		logits, err := tensor.New(shape, dtype.Float32)
+		convey.So(err, convey.ShouldBeNil)
+
+		logitValues, err := logits.Float32Native()
+		convey.So(err, convey.ShouldBeNil)
+
+		logitValues[0] = 0
+		logitValues[1] = 1
+		logitValues[2] = 2
+
+		executor := NewExecutor(ExecutorOptions{
+			InitialValues: map[string]any{
+				"logits": logits,
+			},
+		})
+
+		program := &ast.Program{
+			Steps: []ast.Step{
+				{
+					Op: "sampling.topk_sample",
+					In: map[string]string{
+						"value": "logits",
+					},
+					Config: map[string]any{
+						"top_k": 1,
+					},
+					Out: map[string]string{
+						"value": "next_token",
+					},
+				},
+			},
+		}
+
+		convey.Convey("It should sample without converting through nil", func() {
+			err := executor.Run(context.Background(), program, nil, nil)
+
+			convey.So(err, convey.ShouldBeNil)
+		})
+	})
+}
+
 func TestExecutorRunLoopUntilEOFStopsOnEmptyLine(testingObject *testing.T) {
 	convey.Convey("Given a loop_until_eof body that reads an empty line", testingObject, func() {
 		host := &encodeCaptureHost{line: ""}

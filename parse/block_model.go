@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
@@ -13,7 +14,12 @@ import (
 BlockModel is a caramba model manifest block (topology + hub runtime metadata).
 */
 type BlockModel struct {
-	System blockSystem `yaml:"system"`
+	Outputs []blockPort `yaml:"outputs"`
+	System  blockSystem `yaml:"system"`
+}
+
+type blockPort struct {
+	Name string `yaml:"name"`
 }
 
 type blockSystem struct {
@@ -110,12 +116,35 @@ func (block *BlockModel) TopologyAST() (*ast.Topology, error) {
 
 	if len(block.System.Topology.Nodes) > 0 {
 		return &ast.Topology{
-			Inputs: block.System.Topology.Inputs,
-			Nodes:  block.System.Topology.Nodes,
+			Inputs:  block.System.Topology.Inputs,
+			Outputs: block.outputMap(),
+			Nodes:   block.System.Topology.Nodes,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("parse block model: no topology nodes")
+}
+
+func (block *BlockModel) outputMap() map[string]string {
+	outputs := maps.Clone(block.System.Topology.Outputs)
+
+	if outputs == nil && len(block.Outputs) > 0 {
+		outputs = make(map[string]string, len(block.Outputs))
+	}
+
+	for _, output := range block.Outputs {
+		if output.Name == "" {
+			continue
+		}
+
+		if _, exists := outputs[output.Name]; exists {
+			continue
+		}
+
+		outputs[output.Name] = output.Name
+	}
+
+	return outputs
 }
 
 /*

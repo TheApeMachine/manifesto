@@ -43,15 +43,17 @@ func (loader *IncludeLoader) Topology(filename string) (*ast.Topology, error) {
 
 	if len(document.Topology.Nodes) > 0 {
 		return &ast.Topology{
-			Inputs: document.Topology.Inputs,
-			Nodes:  document.Topology.Nodes,
+			Inputs:  document.Topology.Inputs,
+			Outputs: document.Topology.Outputs,
+			Nodes:   document.Topology.Nodes,
 		}, nil
 	}
 
 	if len(document.System.Topology.Nodes) > 0 {
 		return &ast.Topology{
-			Inputs: document.System.Topology.Inputs,
-			Nodes:  document.System.Topology.Nodes,
+			Inputs:  document.System.Topology.Inputs,
+			Outputs: document.System.Topology.Outputs,
+			Nodes:   document.System.Topology.Nodes,
 		}, nil
 	}
 
@@ -64,9 +66,10 @@ type topologyDocument struct {
 }
 
 type topologySection struct {
-	FromSafeTensors map[string]any `yaml:"from_safetensors,omitempty"`
-	Inputs          []string       `yaml:"inputs,omitempty"`
-	Nodes           []ast.Node     `yaml:"nodes,omitempty"`
+	FromSafeTensors map[string]any    `yaml:"from_safetensors,omitempty"`
+	Inputs          []string          `yaml:"inputs,omitempty"`
+	Outputs         map[string]string `yaml:"outputs,omitempty"`
+	Nodes           []ast.Node        `yaml:"nodes,omitempty"`
 }
 
 type systemTopology struct {

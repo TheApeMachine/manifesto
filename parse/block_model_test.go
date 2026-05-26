@@ -23,3 +23,32 @@ system:
 		})
 	})
 }
+
+func TestBlockModel_TopologyAST(t *testing.T) {
+	convey.Convey("Given a model block with declared outputs", t, func() {
+		raw := []byte(`
+outputs:
+  - name: logits
+system:
+  topology:
+    inputs:
+      - input_ids
+    nodes:
+      - id: lm_head
+        op: projection.linear
+        in:
+          - input_ids
+        out:
+          - logits
+`)
+		block, err := BlockModelFromYAML(raw)
+		convey.So(err, convey.ShouldBeNil)
+
+		convey.Convey("It should preserve output refs for lowering", func() {
+			topology, topologyErr := block.TopologyAST()
+
+			convey.So(topologyErr, convey.ShouldBeNil)
+			convey.So(topology.Outputs["logits"], convey.ShouldEqual, "logits")
+		})
+	})
+}

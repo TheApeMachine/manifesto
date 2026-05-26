@@ -396,7 +396,13 @@ func (executor *Executor) runTopKSample(
 		}
 	}
 
-	logits, err := float32Vector(values[logitsRef])
+	logitsValue, ok := values[logitsRef]
+
+	if !ok {
+		return fmt.Errorf("sampling.topk_sample: unknown logits value %q", logitsRef)
+	}
+
+	logits, err := float32Vector(ctx, logitsValue)
 
 	if err != nil {
 		return err
@@ -483,7 +489,7 @@ func (executor *Executor) runAxpy(
 		return err
 	}
 
-	addend, err := float32Vector(xValue)
+	addend, err := float32Vector(ctx, xValue)
 
 	if err != nil {
 		return err
@@ -900,7 +906,7 @@ func tokenIDFromValue(value any) (int, error) {
 	}
 }
 
-func float32Vector(value any) ([]float32, error) {
+func float32Vector(ctx context.Context, value any) ([]float32, error) {
 	switch typed := value.(type) {
 	case []float32:
 		return typed, nil
@@ -912,6 +918,16 @@ func float32Vector(value any) ([]float32, error) {
 		}
 
 		return out, nil
+	case tensor.Tensor:
+		if typed.DType() != dtype.Float32 {
+			return nil, fmt.Errorf("expected float32 tensor, got %s", typed.DType())
+		}
+
+		if err := typed.Sync(ctx); err != nil {
+			return nil, err
+		}
+
+		return typed.Float32Native()
 	default:
 		return nil, fmt.Errorf("expected float32 vector, got %T", value)
 	}

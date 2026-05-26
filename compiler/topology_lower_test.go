@@ -212,6 +212,8 @@ main:
 category: model
 op: block.model.fake
 name: fake-model
+outputs:
+  - name: logits
 system:
   topology:
     inputs:
@@ -248,6 +250,7 @@ system:
 		convey.So(output.ComputeGraphs["model"], convey.ShouldNotBeNil)
 		convey.So(len(output.Graphs["model"].Nodes), convey.ShouldEqual, 2)
 		convey.So(output.Graphs["model"].Nodes[0].ID, convey.ShouldEqual, "embed")
+		convey.So(output.Graphs["model"].Outputs["logits"], convey.ShouldEqual, "norm")
 		convey.So(resolver.calls, convey.ShouldEqual, 1)
 		convey.So(resolver.lastInclude.Name, convey.ShouldEqual, "model")
 		convey.So(resolver.lastInclude.Source, convey.ShouldEqual, "hf://example/fake-model")

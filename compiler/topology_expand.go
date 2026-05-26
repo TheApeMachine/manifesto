@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -13,8 +14,9 @@ ExpandedTopology is the flat result of materializing every `repeat` template
 in a topology. Inputs are passed through unchanged.
 */
 type ExpandedTopology struct {
-	Inputs []string
-	Nodes  []ast.Node
+	Inputs  []string
+	Outputs map[string]string
+	Nodes   []ast.Node
 }
 
 /*
@@ -25,7 +27,8 @@ supported and return an error.
 */
 func expandTopology(topology *ast.Topology) (*ExpandedTopology, error) {
 	out := &ExpandedTopology{
-		Inputs: append([]string(nil), topology.Inputs...),
+		Inputs:  append([]string(nil), topology.Inputs...),
+		Outputs: cloneOutputRefs(topology.Outputs),
 	}
 
 	for _, node := range topology.Nodes {
@@ -44,6 +47,10 @@ func expandTopology(topology *ast.Topology) (*ExpandedTopology, error) {
 	}
 
 	return out, nil
+}
+
+func cloneOutputRefs(outputs map[string]string) map[string]string {
+	return maps.Clone(outputs)
 }
 
 func isRepeatNode(node ast.Node) bool {
