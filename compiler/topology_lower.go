@@ -159,10 +159,9 @@ func lowerOneNode(
 
 	dagGraph.AddNode(dagNode)
 
-	// A node produces one output per declared out name; for the common case
-	// of a single output, the node ID is itself the producer. Additional
-	// outputs are tracked so downstream nodes that reference them can wire
-	// against the same dag node.
+	// A node produces one output per declared out name. Later declarations
+	// of the same value name rebind downstream consumers to this producer,
+	// which is how manifest state updates express write-then-read ordering.
 	producers[node.ID] = dagNode
 
 	for _, outputName := range node.Out {
@@ -170,9 +169,7 @@ func lowerOneNode(
 			continue
 		}
 
-		if _, exists := producers[outputName]; !exists {
-			producers[outputName] = dagNode
-		}
+		producers[outputName] = dagNode
 	}
 
 	return nil
