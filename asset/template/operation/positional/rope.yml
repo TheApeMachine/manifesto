@@ -46,3 +46,25 @@ bind:
     - ref: input.x.shape
       dim: -1
     - ref: input.x.dtype
+  variants:
+    - when:
+        input_count: 2
+      method: RoPE
+      config_struct: RoPEConfig
+      config_fields:
+        BaseFreq:
+          ref: config.base.float
+      output:
+        shape:
+          - ref: input.x.shape
+        dtype: input.x.dtype
+      args:
+        - ref: input.x.pointer
+        - ref: output.y.pointer
+        - ref: input.x.shape
+          dim: 0
+        - ref: input.x.shape
+          dim: -2
+        - ref: input.x.shape
+          dim: -1
+        - ref: input.x.dtype

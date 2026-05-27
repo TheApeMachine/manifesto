@@ -38,12 +38,13 @@ func (session *ProgramSession) CallGraph(
 	}
 
 	return session.backend.CallGraph(ctx, GraphCallRequest{
-		GraphName:    graphName,
-		Graph:        graph,
-		Compute:      computeGraph,
-		Plan:         session.plans[graphName],
-		Inputs:       inputs,
-		StateOutputs: stateOutputs,
+		GraphName:      graphName,
+		Graph:          graph,
+		Compute:        computeGraph,
+		Plan:           session.plans[graphName],
+		Inputs:         inputs,
+		StateOutputs:   stateOutputs,
+		LaunchBindings: DeriveLaunchBindings(graph, inputs),
 	})
 }
 
@@ -102,4 +103,3 @@ func (session *ProgramSession) StateMemory() tensor.Backend {
 
 	return session.stateMemory
 }
-

@@ -116,9 +116,10 @@ func (block *BlockModel) TopologyAST() (*ast.Topology, error) {
 
 	if len(block.System.Topology.Nodes) > 0 {
 		return &ast.Topology{
-			Inputs:  block.System.Topology.Inputs,
-			Outputs: block.outputMap(),
-			Nodes:   block.System.Topology.Nodes,
+			Inputs:   block.System.Topology.Inputs,
+			Outputs:  block.outputMap(),
+			Nodes:    block.System.Topology.Nodes,
+			Bindings: block.System.Topology.Bindings,
 		}, nil
 	}
 

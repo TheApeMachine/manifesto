@@ -14,9 +14,10 @@ ExpandedTopology is the flat result of materializing every `repeat` template
 in a topology. Inputs are passed through unchanged.
 */
 type ExpandedTopology struct {
-	Inputs  []string
-	Outputs map[string]string
-	Nodes   []ast.Node
+	Inputs   []string
+	Outputs  map[string]string
+	Nodes    []ast.Node
+	Bindings map[string]int64
 }
 
 /*
@@ -27,8 +28,9 @@ supported and return an error.
 */
 func expandTopology(topology *ast.Topology) (*ExpandedTopology, error) {
 	out := &ExpandedTopology{
-		Inputs:  append([]string(nil), topology.Inputs...),
-		Outputs: cloneOutputRefs(topology.Outputs),
+		Inputs:   append([]string(nil), topology.Inputs...),
+		Outputs:  cloneOutputRefs(topology.Outputs),
+		Bindings: maps.Clone(topology.Bindings),
 	}
 
 	for _, node := range topology.Nodes {
@@ -104,7 +106,7 @@ func substituteNode(node ast.Node, indexVar string, index int) ast.Node {
 	substituted := ast.Node{
 		ID:     replacer.Replace(node.ID),
 		Op:     node.Op,
-		Config: cloneAttributes(node.Config),
+		Config: substituteConfig(node.Config, replacer),
 	}
 
 	substituted.In = make([]string, 0, len(node.In))
@@ -130,6 +132,35 @@ func substituteNode(node ast.Node, indexVar string, index int) ast.Node {
 	}
 
 	return substituted
+}
+
+func substituteConfig(config map[string]any, replacer *strings.Replacer) map[string]any {
+	if len(config) == 0 {
+		return nil
+	}
+
+	out := make(map[string]any, len(config))
+
+	for key, value := range config {
+		out[key] = substituteConfigValue(value, replacer)
+	}
+
+	return out
+}
+
+func substituteConfigValue(value any, replacer *strings.Replacer) any {
+	switch typed := value.(type) {
+	case string:
+		replaced := replacer.Replace(typed)
+
+		if parsed, err := strconv.Atoi(strings.TrimSpace(replaced)); err == nil {
+			return parsed
+		}
+
+		return replaced
+	default:
+		return value
+	}
 }
 
 func repeatCount(raw any) (int, error) {

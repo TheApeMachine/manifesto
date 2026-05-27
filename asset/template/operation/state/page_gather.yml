@@ -17,10 +17,21 @@ outputs:
     type: tensor
     description: Logical gathered tensor view
 config:
-  - name: shape
-    type: shape
-    description: Shape of the paged tensor storage
-  - name: length
+  - name: page_size
     type: int
-    default: 0
-    description: Number of logical rows to gather; zero means dynamic length
+    default: 16
+    description: Number of logical rows per page
+bind:
+  method: state.page_gather
+  output:
+    shape:
+      - ref: launch.KV.int
+      - ref: input.storage.shape
+        dim: -2
+      - ref: input.storage.shape
+        dim: -1
+    dtype: input.storage.dtype
+  args:
+    - ref: input.storage
+    - ref: input.page_ids
+    - ref: config.page_size.int

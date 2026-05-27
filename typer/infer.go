@@ -77,6 +77,11 @@ func Infer(graph *ast.Graph) (InferStats, []EdgeError, error) {
 	// Graph inputs are typed permissively; they enter the graph as
 	// unconstrained PortTypes (Float32, single symbolic dim N, contiguous).
 	for _, inputName := range graph.Inputs {
+		if portType, ok := graphInputPortType(inputName); ok {
+			producerTypes[inputName] = portType
+			continue
+		}
+
 		producerTypes[inputName] = anyTensor()
 	}
 

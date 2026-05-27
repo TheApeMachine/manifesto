@@ -213,11 +213,15 @@ func stateStorageDType(declaration ast.StateDeclaration, fallback dtype.DType) (
 
 	parsed, err := dtype.Parse(raw)
 
-	if err != nil || !parsed.IsFloat() {
+	if err != nil {
 		return dtype.Invalid, fmt.Errorf("runtime session: state %q has invalid config dtype %q", declaration.Name, raw)
 	}
 
-	return parsed, nil
+	if parsed.IsFloat() || parsed == dtype.Int32 {
+		return parsed, nil
+	}
+
+	return dtype.Invalid, fmt.Errorf("runtime session: state %q has unsupported config dtype %q", declaration.Name, raw)
 }
 
 func materializeStateTensorByDeclaration(
@@ -267,6 +271,19 @@ func materializeStateTensor(
 
 	if err != nil {
 		return err
+	}
+
+	if storageDType == dtype.Int32 {
+		buffer := make([]byte, len(values)*4)
+		tensorValue, err := memory.Upload(shape, dtype.Int32, buffer)
+
+		if err != nil {
+			return err
+		}
+
+		stateStore.Set(declaration.Name, tensorValue)
+
+		return nil
 	}
 
 	tensorValue, err := memory.Upload(shape, storageDType, Float32AsDTypeBytes(values, storageDType))

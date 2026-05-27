@@ -54,8 +54,6 @@ bind:
     - ref: input.k.pointer
     - ref: input.v.pointer
     - ref: output.out.pointer
-    - ref: input.q.shape
-      dim: 0
-    - ref: input.k.shape
-      dim: 0
+    - ref: launch.N.int
+    - ref: launch.KV.int
     - ref: input.q.dtype

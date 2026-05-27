@@ -55,6 +55,11 @@ type GraphCallRequest struct {
 	Plan         *ExecutionPlan
 	Inputs       map[string]any
 	StateOutputs map[string]bool
+	// LaunchBindings carries per-invocation SymbolMap values (live
+	// sequence length, batch size, …) derived from concrete inputs.
+	// The execution backend substitutes these for planner upper bounds
+	// when resolving bind shapes and shape intrinsics.
+	LaunchBindings ir.SymbolMap
 }
 
 /*
@@ -170,6 +175,10 @@ func (executor *Executor) runStep(
 		return executor.runAxpy(ctx, step, values)
 	case "state.update":
 		return executor.runStateUpdate(ctx, step)
+	case "state.paged_plan":
+		return executor.runPagedPlan(ctx, step, values)
+	case "state.advance_position":
+		return executor.runAdvancePosition(ctx, step, values)
 	case "control.loop_each":
 		return executor.runLoopEach(ctx, step, graphs, compute, values)
 	case "control.loop_count":
@@ -730,20 +739,35 @@ func (executor *Executor) runGraphCall(
 				return err
 			}
 
-			inputs[name] = value
+			resolved, err := ResolveGraphInput(value, executor.stateMemory)
+
+			if err != nil {
+				return fmt.Errorf("graph.call input %q: %w", name, err)
+			}
+
+			inputs[name] = resolved
 			continue
 		}
 
-		inputs[name] = values[ref]
+		rawValue := values[ref]
+
+		resolved, err := ResolveGraphInput(rawValue, executor.stateMemory)
+
+		if err != nil {
+			return fmt.Errorf("graph.call input %q: %w", name, err)
+		}
+
+		inputs[name] = resolved
 	}
 
 	result, err := executor.backend.CallGraph(ctx, GraphCallRequest{
-		GraphName:    graphName,
-		Graph:        graph,
-		Compute:      compute[graphName],
-		Plan:         executor.plans[graphName],
-		Inputs:       inputs,
-		StateOutputs: stateOutputsForStep(step),
+		GraphName:      graphName,
+		Graph:          graph,
+		Compute:        compute[graphName],
+		Plan:           executor.plans[graphName],
+		Inputs:         inputs,
+		StateOutputs:   stateOutputsForStep(step),
+		LaunchBindings: DeriveLaunchBindings(graph, inputs),
 	})
 
 	if err != nil {
@@ -753,7 +777,15 @@ func (executor *Executor) runGraphCall(
 	for name, ref := range step.Out {
 		if value, ok := result.Outputs[name]; ok {
 			if strings.HasPrefix(ref, "state.") && executor.state != nil {
-				if err := executor.state.SetReference(ref, value); err != nil {
+				previous, _ := executor.state.ResolveReference(ref)
+
+				committed, err := CommitGraphStateOutput(ref, previous, value)
+
+				if err != nil {
+					return err
+				}
+
+				if err := executor.state.SetReference(ref, committed); err != nil {
 					return err
 				}
 
@@ -809,27 +841,8 @@ func sampleTopK(logits []float32, temperature float32, topK int) int {
 
 	scores := make([]scored, len(logits))
 
-	hasNaN := false
 	for index, value := range logits {
-		if value != value {
-			hasNaN = true
-		}
 		scores[index] = scored{index: index, value: value}
-	}
-
-	if hasNaN {
-		fmt.Println("LOGITS CONTAIN NANS!")
-	}
-
-	allZero := true
-	for _, value := range logits {
-		if value != 0.0 {
-			allZero = false
-			break
-		}
-	}
-	if allZero {
-		fmt.Println("LOGITS ARE ALL ZERO!")
 	}
 
 	sort.Slice(scores, func(left, right int) bool {

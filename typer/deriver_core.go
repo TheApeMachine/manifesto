@@ -114,6 +114,32 @@ func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 	}, nil
 }
 
+func derivePageGatherOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	_ = node
+	_ = bindings
+
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: state.page_gather needs storage input")
+	}
+
+	storageDims := inputs[0].ShapeSchema.Dimensions
+
+	if len(storageDims) < 2 {
+		return ir.PortType{}, fmt.Errorf("typer: state.page_gather storage rank too low")
+	}
+
+	tail := storageDims[len(storageDims)-2:]
+
+	return ir.PortType{
+		DType: inputs[0].DType,
+		ShapeSchema: ir.ShapeSchema{
+			Dimensions: append([]ir.Dimension{{Symbol: "KV"}}, tail...),
+		},
+		Layout: ir.LayoutContiguous,
+		Kind:   ir.SemanticHiddenState,
+	}, nil
+}
+
 func deriveMatmulOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = node
 	_ = bindings

@@ -137,14 +137,33 @@ var specTable = map[string]OpSpec{
 		OutputDeriver: deriveLastTokenOutput,
 	},
 	"positional.rope": {
-		Inputs:        []ir.PortType{anyTensor()},
+		Inputs: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
+		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"state.page_write": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+			anyTensor(),
+			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
+			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),
+	},
+	"state.page_gather": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+			{DType: dtype.Int32, ShapeSchema: shapeSymbols("P"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
+		},
+		OutputDeriver: derivePageGatherOutput,
 	},
 	"attention.gqa": {
 		Inputs: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},

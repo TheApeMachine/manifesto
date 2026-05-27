@@ -5,9 +5,10 @@ Topology is a fully expanded or partially expanded compute DAG expressed in
 manifest primitive operations.
 */
 type Topology struct {
-	Inputs  []string
-	Outputs map[string]string
-	Nodes   []Node
+	Inputs   []string
+	Outputs  map[string]string
+	Nodes    []Node
+	Bindings map[string]int64
 }
 
 /*

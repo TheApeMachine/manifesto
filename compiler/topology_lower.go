@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/ir/dag"
 	"github.com/theapemachine/manifesto/tensor"
 )
@@ -46,6 +47,7 @@ func LowerTopology(topology *ast.Topology) (*LoweredGraph, error) {
 		Inputs:   append([]string(nil), expanded.Inputs...),
 		Outputs:  make(map[string]string),
 		Metadata: make(map[string]any),
+		Bindings: symbolMapFromTopology(expanded.Bindings),
 	}
 
 	dagGraph := dag.NewGraph()
@@ -231,6 +233,20 @@ func cloneAttributes(config map[string]any) map[string]any {
 
 	for key, value := range config {
 		out[key] = value
+	}
+
+	return out
+}
+
+func symbolMapFromTopology(bindings map[string]int64) ir.SymbolMap {
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	out := make(ir.SymbolMap, len(bindings))
+
+	for symbol, value := range bindings {
+		out[symbol] = value
 	}
 
 	return out

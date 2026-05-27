@@ -3,18 +3,18 @@ name: chat
 category: runtime
 
 include:
-  model: hf://meta-llama/Llama-3.2-1B-Instruct
+  model: hf://meta-llama/Llama-3.2-1B-Instruct#paged_decode
 
 state:
   - name: key_pages
     type: paged_tensor
-    shape: [4096, 16, 8, 64]
+    shape: [16, 4096, 16, 8, 64]
     config:
       page_size: 16
       page_count: 4096
   - name: value_pages
     type: paged_tensor
-    shape: [4096, 16, 8, 64]
+    shape: [16, 4096, 16, 8, 64]
     config:
       page_size: 16
       page_count: 4096
@@ -29,15 +29,20 @@ state:
   - name: position_offset
     type: tensor
     shape: [1]
+    config:
+      dtype: int32
   - name: write_page_ids
     type: tensor
     shape: [1]
+    config:
+      dtype: int32
   - name: write_offsets
     type: tensor
     shape: [1]
+    config:
+      dtype: int32
 
 main:
-  # Session: keep reading until stdin closes or user exits
   - repeat: until_eof
     steps:
       - in: <stdin>
@@ -52,11 +57,75 @@ main:
           append_to: input_ids
         out: input_ids
 
-      # Decode loop — all atomics / graph.call, no sampler object
-      - repeat: 256
+      - in:
+          token_ids: input_ids
+          position_offset: state.position_offset
+        op: state.paged_plan
+        config:
+          page_size: 16
+        out:
+          - state.write_page_ids
+          - state.write_offsets
+          - state.key_page_table
+          - state.value_page_table
+
+      - in:
+          input_ids: input_ids
+          position_offset: state.position_offset
+          key_pages: state.key_pages
+          value_pages: state.value_pages
+          key_page_table: state.key_page_table
+          value_page_table: state.value_page_table
+          write_page_ids: state.write_page_ids
+          write_offsets: state.write_offsets
+        op: graph.call
+        graph: model
+        out:
+          logits: logits
+          key_pages: state.key_pages
+          value_pages: state.value_pages
+
+      - in: logits
+        op: sampling.topk_sample
+        config:
+          vocab_size: 128256
+          temperature: 0.8
+          top_k: 50
+          stop_token_ids:
+            - 128001
+            - 128008
+            - 128009
+        out: next_token
+
+      - in: next_token
+        op: io.emit_token
+        config:
+          tokenizer: hf://meta-llama/Llama-3.2-1B-Instruct
+        out: _
+
+      - in:
+          token_ids: input_ids
+          position_offset: state.position_offset
+        op: state.advance_position
+        out:
+          - state.position_offset
+
+      - repeat: 255
         steps:
           - in:
-              input_ids: input_ids
+              token_ids: next_token
+              position_offset: state.position_offset
+            op: state.paged_plan
+            config:
+              page_size: 16
+            out:
+              - state.write_page_ids
+              - state.write_offsets
+              - state.key_page_table
+              - state.value_page_table
+
+          - in:
+              input_ids: next_token
               position_offset: state.position_offset
               key_pages: state.key_pages
               value_pages: state.value_pages
@@ -76,7 +145,7 @@ main:
             config:
               vocab_size: 128256
               temperature: 0.8
-              top_k: 1
+              top_k: 50
               stop_token_ids:
                 - 128001
                 - 128008
@@ -89,8 +158,9 @@ main:
               tokenizer: hf://meta-llama/Llama-3.2-1B-Instruct
             out: _
 
-          - in: next_token
-            op: value.append
-            config:
-              target: input_ids
-            out: input_ids
+          - in:
+              token_ids: next_token
+              position_offset: state.position_offset
+            op: state.advance_position
+            out:
+              - state.position_offset
