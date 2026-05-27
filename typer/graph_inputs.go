@@ -12,6 +12,34 @@ permissive anyTensor() default.
 */
 func graphInputPortType(inputName string) (ir.PortType, bool) {
 	switch inputName {
+	case "input_ids":
+		return ir.PortType{
+			DType:       dtype.Int32,
+			ShapeSchema: shapeSymbols("B", "T"),
+			Layout:      ir.LayoutContiguous,
+			Kind:        ir.SemanticTokenIndex,
+		}, true
+	case "hidden_states", "latents":
+		return ir.PortType{
+			DType:       dtype.Float32,
+			ShapeSchema: shapeSymbols("B", "T", "D"),
+			Layout:      ir.LayoutContiguous,
+			Kind:        ir.SemanticHiddenState,
+		}, true
+	case "encoder_hidden_states", "text_embedding":
+		return ir.PortType{
+			DType:       dtype.Float32,
+			ShapeSchema: shapeSymbols("B", "C", "E"),
+			Layout:      ir.LayoutContiguous,
+			Kind:        ir.SemanticHiddenState,
+		}, true
+	case "timestep":
+		return ir.PortType{
+			DType:       dtype.Float32,
+			ShapeSchema: shapeSymbols("B"),
+			Layout:      ir.LayoutContiguous,
+			Kind:        ir.SemanticGeneric,
+		}, true
 	case "key_pages", "value_pages":
 		return ir.PortType{
 			DType:       dtype.Float32,

@@ -1,0 +1,59 @@
+kind: Operation
+category: positional
+op: positional.multi_axis_rope
+name: MultiAxisRoPE
+label: Multi-Axis Rotary Embeddings
+description: Applies FLUX-style four-axis rotary position embeddings over interleaved head pairs.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input [batch, sequence, num_heads, head_dim]
+outputs:
+  - name: y
+    type: tensor
+    description: Position-encoded output with the same shape
+config:
+  - name: head_dim
+    type: int
+    description: Head dimension
+  - name: base
+    type: float
+    default: 10000
+    description: Frequency base
+  - name: latent_seq_len
+    type: int
+    description: Number of latent tokens at the end of the joint sequence
+  - name: latent_side
+    type: int
+    description: Width and height of the latent token grid
+  - name: mode
+    type: string
+    default: interleaved
+    description: Pair layout marker carried by FLUX manifests
+bind:
+  method: MultiAxisRoPE
+  config_struct: MultiAxisRoPEConfig
+  config_fields:
+    BaseFreq:
+      ref: config.base.float
+    LatentSeqLen:
+      ref: config.latent_seq_len.int
+    LatentSide:
+      ref: config.latent_side.int
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: -3
+    - ref: input.x.shape
+      dim: -2
+    - ref: input.x.shape
+      dim: -1
+    - ref: input.x.dtype

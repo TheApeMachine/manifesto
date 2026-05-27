@@ -36,14 +36,16 @@ type ConfigParam struct {
 BindArg describes one typed value resolved by the execution dispatcher.
 */
 type BindArg struct {
-	Ref         string `yaml:"ref,omitempty"          json:"ref,omitempty"`
-	Dim         *int   `yaml:"dim,omitempty"          json:"dim,omitempty"`
-	DropTail    int    `yaml:"drop_tail,omitempty"    json:"drop_tail,omitempty"`
-	Product     bool   `yaml:"product,omitempty"      json:"product,omitempty"`
-	ProductTail int    `yaml:"product_tail,omitempty" json:"product_tail,omitempty"`
-	Divisor     int    `yaml:"divisor,omitempty"      json:"divisor,omitempty"`
-	DivisorRef  string `yaml:"divisor_ref,omitempty"  json:"divisor_ref,omitempty"`
-	Value       any    `yaml:"value,omitempty"        json:"value,omitempty"`
+	Ref          string `yaml:"ref,omitempty"           json:"ref,omitempty"`
+	Dim          *int   `yaml:"dim,omitempty"           json:"dim,omitempty"`
+	DropHead     int    `yaml:"drop_head,omitempty"     json:"drop_head,omitempty"`
+	DropTail     int    `yaml:"drop_tail,omitempty"     json:"drop_tail,omitempty"`
+	Product      bool   `yaml:"product,omitempty"       json:"product,omitempty"`
+	ProductTail  int    `yaml:"product_tail,omitempty"  json:"product_tail,omitempty"`
+	Divisor      int    `yaml:"divisor,omitempty"       json:"divisor,omitempty"`
+	DivisorRef   string `yaml:"divisor_ref,omitempty"   json:"divisor_ref,omitempty"`
+	Conv2DOutput string `yaml:"conv2d_output,omitempty" json:"conv2d_output,omitempty"`
+	Value        any    `yaml:"value,omitempty"         json:"value,omitempty"`
 }
 
 /*

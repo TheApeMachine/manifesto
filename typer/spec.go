@@ -72,6 +72,12 @@ var specTable = map[string]OpSpec{
 		},
 		OutputDeriver: deriveEmbeddingOutput,
 	},
+	"embedding.timestep": {
+		Inputs: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("B"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
+		},
+		OutputDeriver: deriveTimestepEmbeddingOutput,
+	},
 	"math.rmsnorm": {
 		Inputs: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
@@ -89,6 +95,13 @@ var specTable = map[string]OpSpec{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D"), Layout: ir.LayoutContiguous},
 		},
 		OutputDeriver: deriveNormOutput,
+	},
+	"math.modulated_layernorm": {
+		Inputs: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			anyTensor(),
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},
 	"projection.linear": {
 		Inputs: []ir.PortType{
@@ -132,6 +145,10 @@ var specTable = map[string]OpSpec{
 		Inputs:        []ir.PortType{anyTensor()},
 		OutputDeriver: deriveMergeHeadsOutput,
 	},
+	"shape.concat": {
+		Inputs:        []ir.PortType{anyTensor(), anyTensor()},
+		OutputDeriver: deriveConcatOutput,
+	},
 	"shape.last_token": {
 		Inputs:        []ir.PortType{anyTensor()},
 		OutputDeriver: deriveLastTokenOutput,
@@ -141,6 +158,10 @@ var specTable = map[string]OpSpec{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
 		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"positional.multi_axis_rope": {
+		Inputs:        []ir.PortType{anyTensor()},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},
 	"state.page_write": {

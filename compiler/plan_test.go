@@ -303,22 +303,24 @@ func TestMergeSymbolMaps_AcceptsAgreeingBindings(test *testing.T) {
 		base := ir.SymbolMap{"B": 4, "T": 32}
 		overlay := ir.SymbolMap{"T": 32, "D": 64}
 
-		merged := mergeSymbolMaps(base, overlay)
+		merged, err := mergeSymbolMaps(base, overlay)
 
+		convey.So(err, convey.ShouldBeNil)
 		convey.So(merged["B"], convey.ShouldEqual, int64(4))
 		convey.So(merged["T"], convey.ShouldEqual, int64(32))
 		convey.So(merged["D"], convey.ShouldEqual, int64(64))
 	})
 }
 
-func TestMergeSymbolMaps_PanicsOnConflict(test *testing.T) {
+func TestMergeSymbolMaps_RejectsConflict(test *testing.T) {
 	convey.Convey("Given two SymbolMaps that disagree on a symbol", test, func() {
 		base := ir.SymbolMap{"B": 4}
 		overlay := ir.SymbolMap{"B": 8}
 
-		convey.So(func() {
-			_ = mergeSymbolMaps(base, overlay)
-		}, convey.ShouldPanic)
+		_, err := mergeSymbolMaps(base, overlay)
+
+		convey.So(err, convey.ShouldNotBeNil)
+		convey.So(err.Error(), convey.ShouldContainSubstring, "B")
 	})
 }
 

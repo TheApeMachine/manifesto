@@ -67,7 +67,7 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		return nil, err
 	}
 
-	return &ast.Program{
+	program := &ast.Program{
 		Name:           document.Name,
 		Includes:       includes,
 		IncludeObjects: includeObjects,
@@ -76,7 +76,13 @@ func (parser *Parser) Program(data []byte) (*ast.Program, error) {
 		Schedulers:     schedulers,
 		Graphs:         graphs,
 		Steps:          steps,
-	}, nil
+	}
+
+	if err := parser.applyVariables(program); err != nil {
+		return nil, err
+	}
+
+	return program, nil
 }
 
 func (parser *Parser) normalizeIncludes(rawIncludes map[string]any) (map[string]string, map[string]any) {

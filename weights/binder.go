@@ -2,6 +2,7 @@ package weights
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/types"
@@ -67,14 +68,25 @@ func (binder *Binder) Bind(
 			weightSlice = node.Weights.Slice
 		}
 
+		biasName, err := binder.resolveBiasName(node, tensorName, index)
+
+		if err != nil {
+			return nil, err
+		}
+
 		node.Weights = &ast.BoundWeight{
 			TensorName: tensorName,
+			BiasName:   biasName,
 			Shape:      append([]int64(nil), token.Shape...),
 			DType:      token.Precision,
 			Slice:      weightSlice,
 		}
 
 		names[tensorName] = struct{}{}
+
+		if biasName != "" {
+			names[biasName] = struct{}{}
+		}
 	}
 
 	return names, nil
@@ -110,4 +122,26 @@ func (binder *Binder) resolveTensorName(node *ast.GraphNode, weightMap map[strin
 	}
 
 	return ""
+}
+
+func (binder *Binder) resolveBiasName(
+	node *ast.GraphNode,
+	tensorName string,
+	index map[string]types.Token,
+) (string, error) {
+	if node.Weights != nil && node.Weights.BiasName != "" {
+		if _, ok := index[node.Weights.BiasName]; ok {
+			return node.Weights.BiasName, nil
+		}
+
+		return "", fmt.Errorf("weights bind: missing bias tensor %q for node %q", node.Weights.BiasName, node.ID)
+	}
+
+	biasName := strings.TrimSuffix(tensorName, ".weight") + ".bias"
+
+	if _, ok := index[biasName]; ok {
+		return biasName, nil
+	}
+
+	return "", nil
 }

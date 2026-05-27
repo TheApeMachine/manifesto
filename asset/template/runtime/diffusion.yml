@@ -26,7 +26,7 @@ variables:
 
 state:
   - name: step_index
-    type: scalar
+    type: counter
     shape: [1]
     init: zero
   - name: latents
@@ -70,7 +70,7 @@ main:
     config:
       shape: [1, 4096, 128]
       seed: $variables.seed
-      dtype: bfloat16
+      dtype: float32
     out: state.latents
 
   # 5) Build the sigma schedule: linspace(1, 0, num_inference_steps).
@@ -88,17 +88,19 @@ main:
     config:
       op: mul
       scalar: 1000.0
-    out: state.timesteps
+    out:
+      value: state.timesteps
+      loop: timesteps
 
   # 7) Denoising loop.
-  - repeat: 4
+  - op: control.loop_each
+    source: timesteps
+    as: timestep
     steps:
       - in:
-          latents: state.latents
-          text_embedding: state.text_embedding
-          step_index: state.step_index
-          sigmas: state.sigmas
-          timesteps: state.timesteps
+          hidden_states: state.latents
+          encoder_hidden_states: state.text_embedding
+          timestep: timestep
         op: graph.call
         graph: transformer
         out:

@@ -329,7 +329,12 @@ func (programCompiler *ProgramCompiler) runPlanner(
 	workspaces := make(map[string]*ir.Topology, len(graphs))
 
 	for name, graph := range graphs {
-		mergedBindings := mergeSymbolMaps(graph.Bindings, programCompiler.plannerBindings)
+		mergedBindings, err := mergeSymbolMaps(graph.Bindings, programCompiler.plannerBindings)
+
+		if err != nil {
+			return nil, fmt.Errorf("compiler: plan graph %q: %w", name, err)
+		}
+
 		graph.Bindings = mergedBindings
 
 		topology, err := PlanGraph(graph)
@@ -347,13 +352,11 @@ func (programCompiler *ProgramCompiler) runPlanner(
 /*
 mergeSymbolMaps returns a new SymbolMap containing every binding from
 both inputs. When the same symbol appears on both sides with the same
-value it's idempotent; conflicting values surface as a panic because the
-typer is supposed to have caught conflicts long before the planner runs
-(see ir.bindSymbol). A panic here means a real invariant violation —
-either the typer missed something or the caller passed bindings that
-contradict the manifest.
+value it is idempotent; conflicting values are returned as compiler
+errors because caller-provided planner bounds may contradict a graph's
+concrete type bindings.
 */
-func mergeSymbolMaps(base, overlay ir.SymbolMap) ir.SymbolMap {
+func mergeSymbolMaps(base, overlay ir.SymbolMap) (ir.SymbolMap, error) {
 	merged := make(ir.SymbolMap, len(base)+len(overlay))
 
 	for symbol, value := range base {
@@ -362,16 +365,16 @@ func mergeSymbolMaps(base, overlay ir.SymbolMap) ir.SymbolMap {
 
 	for symbol, value := range overlay {
 		if existing, ok := merged[symbol]; ok && existing != value {
-			panic(fmt.Sprintf(
+			return nil, fmt.Errorf(
 				"compiler: conflicting binding for symbol %q: %d (typer) vs %d (caller)",
 				symbol, existing, value,
-			))
+			)
 		}
 
 		merged[symbol] = value
 	}
 
-	return merged
+	return merged, nil
 }
 
 /*

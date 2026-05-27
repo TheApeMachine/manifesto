@@ -31,6 +31,7 @@ func TestLowerTopologyFlatChain(t *testing.T) {
 					Out: []string{"normed"},
 					Weights: &ast.WeightSpec{
 						Weight: "model.norm.weight",
+						Bias:   "model.norm.bias",
 					},
 				},
 				{
@@ -54,8 +55,13 @@ func TestLowerTopologyFlatChain(t *testing.T) {
 			convey.So(lowered.AST.Nodes[0].Op, convey.ShouldEqual, "embedding.token")
 			convey.So(lowered.AST.Nodes[0].Inputs, convey.ShouldResemble, []string{"input_ids"})
 			convey.So(lowered.AST.Nodes[0].Attributes["vocab_size"], convey.ShouldEqual, 128256)
+			convey.So(lowered.AST.Nodes[0].Weights, convey.ShouldNotBeNil)
+			convey.So(lowered.AST.Nodes[0].Weights.TensorName, convey.ShouldEqual, "embed.weight")
 			convey.So(lowered.AST.Nodes[1].Weights, convey.ShouldNotBeNil)
 			convey.So(lowered.AST.Nodes[1].Weights.TensorName, convey.ShouldEqual, "model.norm.weight")
+			convey.So(lowered.AST.Nodes[1].Weights.BiasName, convey.ShouldEqual, "model.norm.bias")
+			convey.So(lowered.AST.Nodes[2].Weights, convey.ShouldNotBeNil)
+			convey.So(lowered.AST.Nodes[2].Weights.TensorName, convey.ShouldEqual, "out.weight")
 		})
 
 		convey.Convey("And the dag.Graph forms a verifiable topology with layered execution", func() {
@@ -69,6 +75,87 @@ func TestLowerTopologyFlatChain(t *testing.T) {
 			convey.So(layers[1][0].ID(), convey.ShouldEqual, "embed")
 			convey.So(layers[2][0].ID(), convey.ShouldEqual, "norm")
 			convey.So(layers[3][0].ID(), convey.ShouldEqual, "out")
+		})
+	})
+}
+
+func TestLowerTopologyBindsFromSafeTensorsConfig(t *testing.T) {
+	convey.Convey("Given a topology node with safetensors weight metadata in config", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{"hidden"},
+			Nodes: []ast.Node{
+				{
+					ID:  "single_transformer_blocks.0.attn.to_q",
+					Op:  "projection.linear",
+					In:  []string{"hidden"},
+					Out: []string{"query"},
+					Config: map[string]any{
+						"from_safetensors": map[string]any{
+							"weight":      "single_transformer_blocks.0.attn.to_qkv.weight",
+							"bias":        "single_transformer_blocks.0.attn.to_qkv.bias",
+							"slice_axis":  "output",
+							"slice_start": 0,
+							"slice_end":   3072,
+						},
+					},
+				},
+			},
+		}
+
+		lowered, err := LowerTopology(topology)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(lowered, convey.ShouldNotBeNil)
+
+		convey.Convey("Then the lowered graph carries the declared tensor and slice", func() {
+			weights := lowered.AST.Nodes[0].Weights
+
+			convey.So(weights, convey.ShouldNotBeNil)
+			convey.So(weights.TensorName, convey.ShouldEqual, "single_transformer_blocks.0.attn.to_qkv.weight")
+			convey.So(weights.BiasName, convey.ShouldEqual, "single_transformer_blocks.0.attn.to_qkv.bias")
+			convey.So(weights.Slice, convey.ShouldNotBeNil)
+			convey.So(weights.Slice.Axis, convey.ShouldEqual, "output")
+			convey.So(weights.Slice.Start, convey.ShouldEqual, 0)
+			convey.So(weights.Slice.End, convey.ShouldEqual, 3072)
+		})
+	})
+}
+
+func TestLowerTopologyBindsConventionalWeights(t *testing.T) {
+	convey.Convey("Given weighted primitive nodes without explicit weight metadata", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{"input_ids", "hidden"},
+			Nodes: []ast.Node{
+				{
+					ID:  "model.embed_tokens",
+					Op:  "embedding.token",
+					In:  []string{"input_ids"},
+					Out: []string{"embedded"},
+				},
+				{
+					ID:  "model.norm",
+					Op:  "math.rmsnorm",
+					In:  []string{"embedded"},
+					Out: []string{"normed"},
+				},
+				{
+					ID:  "residual",
+					Op:  "math.add",
+					In:  []string{"normed", "hidden"},
+					Out: []string{"out"},
+				},
+			},
+		}
+
+		lowered, err := LowerTopology(topology)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(lowered, convey.ShouldNotBeNil)
+
+		convey.Convey("Then only weighted primitive nodes receive conventional weight names", func() {
+			convey.So(lowered.AST.Nodes[0].Weights.TensorName, convey.ShouldEqual, "model.embed_tokens.weight")
+			convey.So(lowered.AST.Nodes[1].Weights.TensorName, convey.ShouldEqual, "model.norm.weight")
+			convey.So(lowered.AST.Nodes[2].Weights, convey.ShouldBeNil)
 		})
 	})
 }
@@ -131,6 +218,64 @@ func TestLowerTopologyExpandsRepeat(t *testing.T) {
 
 		convey.Convey("And the dag.Graph wires norm_1 to the linear_0 output h_1", func() {
 			convey.So(lowered.DAG.Verify(), convey.ShouldBeNil)
+		})
+	})
+}
+
+func TestLowerTopologyExpandsRepeatOffset(t *testing.T) {
+	convey.Convey("Given a topology with an offset control.repeat block", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{"h_5"},
+			Nodes: []ast.Node{
+				{
+					ID:     "single_stream",
+					Op:     "control.repeat",
+					Repeat: 2,
+					Index:  "i",
+					Offset: 5,
+					Template: []ast.Node{
+						{
+							ID:  "block_${offset_i}",
+							Op:  "math.add",
+							In:  []string{"h_${offset_i}"},
+							Out: []string{"h_${next_offset_i}"},
+							Config: map[string]any{
+								"from_safetensors": map[string]any{
+									"weight": "single.${offset_i}.weight",
+									"slice":  []any{"${offset_i}", "${next_offset_i}"},
+								},
+							},
+							Weights: &ast.WeightSpec{
+								Weight:     "single.${offset_i}.weight",
+								SliceStart: "${offset_i}",
+								SliceEnd:   "${next_offset_i}",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		lowered, err := LowerTopology(topology)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(lowered, convey.ShouldNotBeNil)
+
+		convey.Convey("Then offset aliases should resolve into the absolute layer indexes", func() {
+			convey.So(len(lowered.AST.Nodes), convey.ShouldEqual, 2)
+			convey.So(lowered.AST.Nodes[0].ID, convey.ShouldEqual, "block_5")
+			convey.So(lowered.AST.Nodes[0].Inputs, convey.ShouldResemble, []string{"h_5"})
+			convey.So(lowered.AST.Nodes[0].Weights.TensorName, convey.ShouldEqual, "single.5.weight")
+			convey.So(lowered.AST.Nodes[0].Weights.Slice.Start, convey.ShouldEqual, 5)
+			convey.So(lowered.AST.Nodes[0].Weights.Slice.End, convey.ShouldEqual, 6)
+			convey.So(lowered.AST.Nodes[1].ID, convey.ShouldEqual, "block_6")
+			convey.So(lowered.AST.Nodes[1].Inputs, convey.ShouldResemble, []string{"block_5"})
+		})
+
+		convey.Convey("And nested config values should be substituted", func() {
+			config := lowered.AST.Nodes[0].Attributes["from_safetensors"].(map[string]any)
+			convey.So(config["weight"], convey.ShouldEqual, "single.5.weight")
+			convey.So(config["slice"], convey.ShouldResemble, []any{5, 6})
 		})
 	})
 }

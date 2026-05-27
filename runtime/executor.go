@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/dtype/convert"
 	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/tensor"
 )
@@ -175,6 +175,12 @@ func (executor *Executor) runStep(
 		return executor.runAppend(step, values)
 	case "math.axpy":
 		return executor.runAxpy(ctx, step, values)
+	case "math.linspace":
+		return executor.runLinspace(step, values)
+	case "math.scalar_broadcast":
+		return executor.runScalarBroadcast(ctx, step, values)
+	case "random.normal":
+		return executor.runRandomNormal(step, values)
 	case "state.update":
 		return executor.runStateUpdate(ctx, step)
 	case "state.paged_plan":
@@ -746,7 +752,7 @@ func (executor *Executor) runGraphCall(
 				return err
 			}
 
-			resolved, err := ResolveGraphInput(value, executor.stateMemory)
+			resolved, err := ResolveGraphInputForGraph(graph, name, value, executor.stateMemory)
 
 			if err != nil {
 				return fmt.Errorf("graph.call input %q: %w", name, err)
@@ -758,7 +764,7 @@ func (executor *Executor) runGraphCall(
 
 		rawValue := values[ref]
 
-		resolved, err := ResolveGraphInput(rawValue, executor.stateMemory)
+		resolved, err := ResolveGraphInputForGraph(graph, name, rawValue, executor.stateMemory)
 
 		if err != nil {
 			return fmt.Errorf("graph.call input %q: %w", name, err)
@@ -932,19 +938,23 @@ func float32Vector(ctx context.Context, value any) ([]float32, error) {
 
 		return out, nil
 	case tensor.Tensor:
-		if typed.DType() != dtype.Float32 {
-			return nil, fmt.Errorf("expected float32 tensor, got %s", typed.DType())
+		if !typed.DType().IsFloat() {
+			return nil, fmt.Errorf("expected float tensor, got %s", typed.DType())
 		}
 
 		if err := typed.Sync(ctx); err != nil {
 			return nil, err
 		}
 
+		if typed.Location() == tensor.Host && typed.DType() == dtype.Float32 {
+			return typed.Float32Native()
+		}
+
 		if typed.Location() != tensor.Host {
 			return float32VectorFromRawTensor(typed)
 		}
 
-		return typed.Float32Native()
+		return float32VectorFromRawTensor(typed)
 	default:
 		return nil, fmt.Errorf("expected float32 vector, got %T", value)
 	}
@@ -957,21 +967,7 @@ func float32VectorFromRawTensor(value tensor.Tensor) ([]float32, error) {
 		return nil, err
 	}
 
-	if dataType != dtype.Float32 {
-		return nil, fmt.Errorf("expected float32 tensor bytes, got %s", dataType)
-	}
-
-	if len(rawBytes)%4 != 0 {
-		return nil, fmt.Errorf("float32 tensor byte length %d is not divisible by 4", len(rawBytes))
-	}
-
-	values := make([]float32, len(rawBytes)/4)
-
-	for index := range values {
-		values[index] = math.Float32frombits(binary.LittleEndian.Uint32(rawBytes[index*4:]))
-	}
-
-	return values, nil
+	return convert.BytesToFloat32(dataType, rawBytes)
 }
 
 func setRuntimeValue(values map[string]any, ref string, value any) {

@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/ir"
+	"github.com/theapemachine/manifesto/tensor"
 )
 
 /*
@@ -95,6 +97,29 @@ func tokenSequenceLength(value any) (int64, bool) {
 		return 1, true
 	case int64:
 		return 1, true
+	case tensor.Tensor:
+		if typed.DType() != dtype.Int32 {
+			return 0, false
+		}
+
+		dimensions := typed.Shape().Dims()
+
+		switch len(dimensions) {
+		case 1:
+			if dimensions[0] == 0 {
+				return 0, false
+			}
+
+			return int64(dimensions[0]), true
+		case 2:
+			if dimensions[0] == 0 || dimensions[1] == 0 {
+				return 0, false
+			}
+
+			return int64(dimensions[1]), true
+		default:
+			return 0, false
+		}
 	default:
 		return 0, false
 	}

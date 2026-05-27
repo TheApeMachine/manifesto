@@ -1,0 +1,58 @@
+kind: Operation
+category: embedding
+op: embedding.timestep
+name: Timestep Embedding
+label: Timestep Embedding
+description: Maps diffusion timesteps to sinusoidal conditioning vectors.
+initial_width: 220
+inputs:
+  - name: timestep
+    type: tensor
+    description: Diffusion timestep values [batch]
+outputs:
+  - name: embedding
+    type: tensor
+    description: Sinusoidal timestep embeddings [batch, dim]
+config:
+  - name: dim
+    type: int
+    description: Embedding dimension
+  - name: flip_sin_to_cos
+    type: bool
+    default: false
+    description: Emit cosines before sines
+  - name: downscale_freq_shift
+    type: float
+    default: 0
+    description: Frequency denominator shift
+  - name: max_period
+    type: float
+    default: 10000
+    description: Maximum sinusoidal period
+  - name: timestep_divisor
+    type: float
+    default: 1
+    description: Divisor applied to incoming timestep values
+bind:
+  method: TimestepEmbedding
+  config_struct: TimestepEmbeddingConfig
+  config_fields:
+    MaxPeriod:
+      ref: config.max_period.float
+    DownscaleFreqShift:
+      ref: config.downscale_freq_shift.float
+    TimestepDivisor:
+      ref: config.timestep_divisor.float
+    FlipSinToCos:
+      ref: config.flip_sin_to_cos.bool
+  output:
+    shape:
+      - ref: input.timestep.shape
+      - ref: config.dim.int
+    dtype: float32
+  args:
+    - ref: input.timestep.pointer
+    - ref: output.embedding.pointer
+    - ref: input.timestep.len
+    - ref: config.dim.int
+    - ref: output.embedding.dtype

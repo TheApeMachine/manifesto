@@ -52,3 +52,30 @@ system:
 		})
 	})
 }
+
+func TestBlockModel_TopologyASTUsesBlockInputs(t *testing.T) {
+	convey.Convey("Given a model block with root-level inputs", t, func() {
+		raw := []byte(`
+inputs:
+  - name: latents
+system:
+  topology:
+    nodes:
+      - id: reshape
+        op: shape.reshape
+        in:
+          - latents
+        out:
+          - image_latents
+`)
+		block, err := BlockModelFromYAML(raw)
+		convey.So(err, convey.ShouldBeNil)
+
+		convey.Convey("It should use them when topology inputs are omitted", func() {
+			topology, topologyErr := block.TopologyAST()
+
+			convey.So(topologyErr, convey.ShouldBeNil)
+			convey.So(topology.Inputs, convey.ShouldResemble, []string{"latents"})
+		})
+	})
+}

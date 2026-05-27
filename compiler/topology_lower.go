@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/theapemachine/manifesto/ast"
@@ -135,9 +136,23 @@ func lowerOneNode(
 		Metadata:   make(map[string]any),
 	}
 
-	if node.Weights != nil {
+	weightSpec, err := weightSpecForNode(node)
+
+	if err != nil {
+		return err
+	}
+
+	if weightSpec != nil {
+		weightSlice, err := weightSliceFromSpec(weightSpec)
+
+		if err != nil {
+			return err
+		}
+
 		graphNode.Weights = &ast.BoundWeight{
-			TensorName: node.Weights.Weight,
+			TensorName: weightSpec.Weight,
+			BiasName:   weightSpec.Bias,
+			Slice:      weightSlice,
 		}
 	}
 
@@ -173,6 +188,149 @@ func lowerOneNode(
 	}
 
 	return nil
+}
+
+func weightSpecForNode(node ast.Node) (*ast.WeightSpec, error) {
+	if node.Weights != nil {
+		return node.Weights, nil
+	}
+
+	fromSafeTensors, err := weightSpecFromSafeTensors(node.Config)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if fromSafeTensors != nil {
+		return fromSafeTensors, nil
+	}
+
+	if !opUsesDefaultWeight(node.Op) {
+		return nil, nil
+	}
+
+	return &ast.WeightSpec{Weight: node.ID + ".weight"}, nil
+}
+
+func weightSpecFromSafeTensors(config map[string]any) (*ast.WeightSpec, error) {
+	if config == nil {
+		return nil, nil
+	}
+
+	raw, ok := config["from_safetensors"]
+
+	if !ok {
+		return nil, nil
+	}
+
+	section, ok := raw.(map[string]any)
+
+	if !ok {
+		return nil, fmt.Errorf("compiler: lower topology: from_safetensors must be a map")
+	}
+
+	spec := &ast.WeightSpec{}
+
+	if err := setStringWeightField(section, "weight", &spec.Weight); err != nil {
+		return nil, err
+	}
+
+	if err := setStringWeightField(section, "bias", &spec.Bias); err != nil {
+		return nil, err
+	}
+
+	if err := setStringWeightField(section, "slice_axis", &spec.SliceAxis); err != nil {
+		return nil, err
+	}
+
+	spec.SliceStart = section["slice_start"]
+	spec.SliceEnd = section["slice_end"]
+
+	if spec.Weight == "" {
+		return nil, fmt.Errorf("compiler: lower topology: from_safetensors requires weight")
+	}
+
+	return spec, nil
+}
+
+func setStringWeightField(section map[string]any, key string, target *string) error {
+	raw, ok := section[key]
+
+	if !ok || raw == nil {
+		return nil
+	}
+
+	value, ok := raw.(string)
+
+	if !ok {
+		return fmt.Errorf("compiler: lower topology: from_safetensors.%s must be a string", key)
+	}
+
+	*target = value
+
+	return nil
+}
+
+func opUsesDefaultWeight(op string) bool {
+	switch op {
+	case "convolution.conv2d",
+		"embedding.token",
+		"math.batchnorm_denorm",
+		"math.groupnorm",
+		"math.layernorm",
+		"math.rmsnorm",
+		"projection.linear":
+		return true
+	default:
+		return false
+	}
+}
+
+func weightSliceFromSpec(spec *ast.WeightSpec) (*ast.WeightSlice, error) {
+	if spec.SliceAxis == "" && spec.SliceStart == nil && spec.SliceEnd == nil {
+		return nil, nil
+	}
+
+	start, err := weightSliceIndex(spec.SliceStart)
+
+	if err != nil {
+		return nil, fmt.Errorf("compiler: lower topology: invalid weight slice start: %w", err)
+	}
+
+	end, err := weightSliceIndex(spec.SliceEnd)
+
+	if err != nil {
+		return nil, fmt.Errorf("compiler: lower topology: invalid weight slice end: %w", err)
+	}
+
+	return &ast.WeightSlice{
+		Axis:  spec.SliceAxis,
+		Start: start,
+		End:   end,
+	}, nil
+}
+
+func weightSliceIndex(value any) (int64, error) {
+	switch typed := value.(type) {
+	case nil:
+		return 0, nil
+	case int:
+		return int64(typed), nil
+	case int64:
+		return typed, nil
+	case float64:
+		return int64(typed), nil
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+
+		if err != nil {
+			return 0, err
+		}
+
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("unsupported type %T", value)
+	}
 }
 
 func resolveTopologyOutputs(

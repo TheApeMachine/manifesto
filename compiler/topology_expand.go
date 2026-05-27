@@ -68,6 +68,12 @@ func expandRepeatNode(node ast.Node) ([]ast.Node, error) {
 		return nil, fmt.Errorf("expand repeat %q: %w", node.ID, err)
 	}
 
+	offset, err := repeatOffset(node.Offset)
+
+	if err != nil {
+		return nil, fmt.Errorf("expand repeat %q: %w", node.ID, err)
+	}
+
 	indexVar := strings.TrimSpace(node.Index)
 
 	if indexVar == "" {
@@ -89,19 +95,30 @@ func expandRepeatNode(node ast.Node) ([]ast.Node, error) {
 				)
 			}
 
-			out = append(out, substituteNode(templateNode, indexVar, index))
+			out = append(out, substituteNode(templateNode, indexVar, index, offset))
 		}
 	}
 
 	return out, nil
 }
 
-func substituteNode(node ast.Node, indexVar string, index int) ast.Node {
+func substituteNode(node ast.Node, indexVar string, index int, offset int) ast.Node {
 	indexLiteral := strconv.Itoa(index)
 	prevLiteral := strconv.Itoa(index)
 	nextLiteral := strconv.Itoa(index + 1)
+	offsetLiteral := strconv.Itoa(index + offset)
+	prevOffsetLiteral := strconv.Itoa(index + offset - 1)
+	nextOffsetLiteral := strconv.Itoa(index + offset + 1)
 
-	replacer := newIndexReplacer(indexVar, indexLiteral, prevLiteral, nextLiteral)
+	replacer := newIndexReplacer(
+		indexVar,
+		indexLiteral,
+		prevLiteral,
+		nextLiteral,
+		offsetLiteral,
+		prevOffsetLiteral,
+		nextOffsetLiteral,
+	)
 
 	substituted := ast.Node{
 		ID:     replacer.Replace(node.ID),
@@ -126,8 +143,8 @@ func substituteNode(node ast.Node, indexVar string, index int) ast.Node {
 			Weight:     replacer.Replace(node.Weights.Weight),
 			Bias:       replacer.Replace(node.Weights.Bias),
 			SliceAxis:  node.Weights.SliceAxis,
-			SliceStart: node.Weights.SliceStart,
-			SliceEnd:   node.Weights.SliceEnd,
+			SliceStart: substituteConfigValue(node.Weights.SliceStart, replacer),
+			SliceEnd:   substituteConfigValue(node.Weights.SliceEnd, replacer),
 		}
 	}
 
@@ -158,9 +175,33 @@ func substituteConfigValue(value any, replacer *strings.Replacer) any {
 		}
 
 		return replaced
+	case []any:
+		out := make([]any, 0, len(typed))
+
+		for _, item := range typed {
+			out = append(out, substituteConfigValue(item, replacer))
+		}
+
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+
+		for key, item := range typed {
+			out[key] = substituteConfigValue(item, replacer)
+		}
+
+		return out
 	default:
 		return value
 	}
+}
+
+func repeatOffset(raw any) (int, error) {
+	if raw == nil {
+		return 0, nil
+	}
+
+	return repeatCount(raw)
 }
 
 func repeatCount(raw any) (int, error) {
@@ -198,7 +239,15 @@ forms used in topology templates:
     residual chain as `out: h_${next_i}` without the inline arithmetic.
   - ${prev_i}   → alias for ${i-1}, symmetric counterpart.
 */
-func newIndexReplacer(indexVar, indexLiteral, prevLiteral, nextLiteral string) *strings.Replacer {
+func newIndexReplacer(
+	indexVar string,
+	indexLiteral string,
+	prevLiteral string,
+	nextLiteral string,
+	offsetLiteral string,
+	prevOffsetLiteral string,
+	nextOffsetLiteral string,
+) *strings.Replacer {
 	_ = prevLiteral
 
 	openBrace := "${"
@@ -209,6 +258,9 @@ func newIndexReplacer(indexVar, indexLiteral, prevLiteral, nextLiteral string) *
 	prevToken := openBrace + indexVar + "-1" + closeBrace
 	nextAlias := openBrace + "next_" + indexVar + closeBrace
 	prevAlias := openBrace + "prev_" + indexVar + closeBrace
+	offsetAlias := openBrace + "offset_" + indexVar + closeBrace
+	nextOffsetAlias := openBrace + "next_offset_" + indexVar + closeBrace
+	prevOffsetAlias := openBrace + "prev_offset_" + indexVar + closeBrace
 
 	prevLiteralValue := strconv.Itoa(safePrev(indexLiteral))
 
@@ -218,6 +270,9 @@ func newIndexReplacer(indexVar, indexLiteral, prevLiteral, nextLiteral string) *
 		prevToken, prevLiteralValue,
 		nextAlias, nextLiteral,
 		prevAlias, prevLiteralValue,
+		offsetAlias, offsetLiteral,
+		nextOffsetAlias, nextOffsetLiteral,
+		prevOffsetAlias, prevOffsetLiteral,
 	)
 }
 

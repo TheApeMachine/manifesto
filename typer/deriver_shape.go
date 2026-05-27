@@ -119,6 +119,94 @@ func deriveMergeHeadsOutput(node *ast.GraphNode, inputs []ir.PortType, bindings 
 	return result, nil
 }
 
+func deriveConcatOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) != 2 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.concat needs two inputs")
+	}
+
+	left := inputs[0]
+	right := inputs[1]
+	leftDimensions := left.ShapeSchema.Dimensions
+	rightDimensions := right.ShapeSchema.Dimensions
+
+	if len(leftDimensions) != len(rightDimensions) {
+		return ir.PortType{}, fmt.Errorf("typer: shape.concat rank mismatch")
+	}
+
+	axis, err := canonicalAxis(configInt64(node, "dim"), len(leftDimensions))
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.concat dim: %w", err)
+	}
+
+	outputDimensions := append([]ir.Dimension(nil), leftDimensions...)
+
+	for index := range leftDimensions {
+		if index == axis {
+			merged, err := concatAxisDimension(leftDimensions[index], rightDimensions[index], bindings)
+
+			if err != nil {
+				return ir.PortType{}, fmt.Errorf("typer: shape.concat axis %d: %w", axis, err)
+			}
+
+			outputDimensions[index] = ir.Dimension{Static: merged}
+			continue
+		}
+
+		if !dimensionsMatch(leftDimensions[index], rightDimensions[index], bindings) {
+			return ir.PortType{}, fmt.Errorf("typer: shape.concat dim %d mismatch", index)
+		}
+	}
+
+	result := left
+	result.ShapeSchema = ir.ShapeSchema{Dimensions: outputDimensions}
+
+	return result, nil
+}
+
+func canonicalAxis(axis int64, rank int) (int, error) {
+	if rank == 0 {
+		return 0, fmt.Errorf("rank 0 tensor")
+	}
+
+	if axis < 0 {
+		axis += int64(rank)
+	}
+
+	if axis < 0 || axis >= int64(rank) {
+		return 0, fmt.Errorf("%d out of range for rank %d", axis, rank)
+	}
+
+	return int(axis), nil
+}
+
+func concatAxisDimension(left ir.Dimension, right ir.Dimension, bindings ir.SymbolMap) (int64, error) {
+	leftValue, err := dimensionInt(left, bindings)
+
+	if err != nil {
+		return 0, err
+	}
+
+	rightValue, err := dimensionInt(right, bindings)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return leftValue + rightValue, nil
+}
+
+func dimensionsMatch(left ir.Dimension, right ir.Dimension, bindings ir.SymbolMap) bool {
+	leftValue, leftErr := dimensionInt(left, bindings)
+	rightValue, rightErr := dimensionInt(right, bindings)
+
+	if leftErr == nil && rightErr == nil {
+		return leftValue == rightValue
+	}
+
+	return left == right
+}
+
 func deriveLastTokenOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = node
 	_ = bindings
@@ -133,9 +221,18 @@ func deriveLastTokenOutput(node *ast.GraphNode, inputs []ir.PortType, bindings i
 		return ir.PortType{}, fmt.Errorf("typer: shape.last_token input rank must be >= 2")
 	}
 
+	if len(dimensions) == 2 {
+		result := inputs[0]
+		result.ShapeSchema = ir.ShapeSchema{
+			Dimensions: append([]ir.Dimension{{Static: 1}}, dimensions[1:]...),
+		}
+
+		return result, nil
+	}
+
 	result := inputs[0]
 	result.ShapeSchema = ir.ShapeSchema{
-		Dimensions: append([]ir.Dimension{{Static: 1}}, dimensions[1:]...),
+		Dimensions: append([]ir.Dimension{dimensions[0]}, dimensions[2:]...),
 	}
 
 	return result, nil

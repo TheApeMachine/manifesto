@@ -3,9 +3,17 @@ package runtime
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 
+	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/tensor"
+)
+
+const (
+	minTokenInt32 = -1 << 31
+	maxTokenInt32 = 1<<31 - 1
 )
 
 /*
@@ -23,6 +31,221 @@ func ResolveGraphInput(value any, memory tensor.Backend) (any, error) {
 		return typed, nil
 	default:
 		return value, nil
+	}
+}
+
+/*
+ResolveGraphInputForGraph normalizes a graph.call boundary value using the
+compiled graph's typed boundary contract.
+*/
+func ResolveGraphInputForGraph(
+	graph *ast.Graph,
+	inputName string,
+	value any,
+	memory tensor.Backend,
+) (any, error) {
+	resolved, err := ResolveGraphInput(value, memory)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !graphInputExpectsBatchedTokens(graph, inputName) {
+		if !graphInputExpectsFloatVector(graph, inputName) {
+			return resolved, nil
+		}
+
+		return float32TensorVector(resolved, memory)
+	}
+
+	return batchedTokenTensor(resolved, memory)
+}
+
+func graphInputExpectsBatchedTokens(graph *ast.Graph, inputName string) bool {
+	portType, ok := graphBoundaryInputType(graph, inputName)
+
+	if !ok {
+		return false
+	}
+
+	return portType.Kind == ir.SemanticTokenIndex &&
+		len(portType.ShapeSchema.Dimensions) == 2
+}
+
+func graphInputExpectsFloatVector(graph *ast.Graph, inputName string) bool {
+	portType, ok := graphBoundaryInputType(graph, inputName)
+
+	if !ok {
+		return false
+	}
+
+	return portType.DType == dtype.Float32 &&
+		len(portType.ShapeSchema.Dimensions) == 1
+}
+
+func graphBoundaryInputType(graph *ast.Graph, inputName string) (ir.PortType, bool) {
+	if graph == nil {
+		return ir.PortType{}, false
+	}
+
+	for _, node := range graph.Nodes {
+		for slotIndex, producerName := range node.Inputs {
+			if producerName != inputName || slotIndex >= len(node.InputTypes) {
+				continue
+			}
+
+			return node.InputTypes[slotIndex], true
+		}
+	}
+
+	return ir.PortType{}, false
+}
+
+func batchedTokenTensor(value any, memory tensor.Backend) (tensor.Tensor, error) {
+	if tensorValue, ok := value.(tensor.Tensor); ok {
+		if tensorValue.DType() != dtype.Int32 {
+			return nil, fmt.Errorf("batched token tensor dtype is %s, expected int32", tensorValue.DType())
+		}
+
+		if tensorValue.Shape().Rank() != 2 {
+			return nil, fmt.Errorf("batched token tensor shape is %v, expected rank 2", tensorValue.Shape().Dims())
+		}
+
+		return tensorValue, nil
+	}
+
+	tokenIDs, err := int32TokenVector(value)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if memory == nil {
+		return nil, fmt.Errorf("tensor backend is required to resolve batched tokens")
+	}
+
+	buffer := make([]byte, len(tokenIDs)*4)
+
+	for index, tokenID := range tokenIDs {
+		binary.LittleEndian.PutUint32(buffer[index*4:], uint32(tokenID))
+	}
+
+	shape, err := tensor.NewShape([]int{1, len(tokenIDs)})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memory.Upload(shape, dtype.Int32, buffer)
+}
+
+func float32TensorVector(value any, memory tensor.Backend) (tensor.Tensor, error) {
+	if tensorValue, ok := value.(tensor.Tensor); ok {
+		if !tensorValue.DType().IsFloat() {
+			return nil, fmt.Errorf("float vector tensor dtype is %s, expected float", tensorValue.DType())
+		}
+
+		if tensorValue.Shape().Rank() != 1 {
+			return nil, fmt.Errorf("float vector tensor shape is %v, expected rank 1", tensorValue.Shape().Dims())
+		}
+
+		return tensorValue, nil
+	}
+
+	values, err := float32VectorValue(value)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if memory == nil {
+		return nil, fmt.Errorf("tensor backend is required to resolve float vector")
+	}
+
+	buffer := make([]byte, len(values)*4)
+
+	for index, value := range values {
+		binary.LittleEndian.PutUint32(buffer[index*4:], math.Float32bits(value))
+	}
+
+	shape, err := tensor.NewShape([]int{len(values)})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memory.Upload(shape, dtype.Float32, buffer)
+}
+
+func float32VectorValue(value any) ([]float32, error) {
+	switch typed := value.(type) {
+	case []float32:
+		return append([]float32(nil), typed...), nil
+	case []float64:
+		values := make([]float32, len(typed))
+
+		for index, element := range typed {
+			values[index] = float32(element)
+		}
+
+		return values, nil
+	case float32:
+		return []float32{typed}, nil
+	case float64:
+		return []float32{float32(typed)}, nil
+	case int:
+		return []float32{float32(typed)}, nil
+	case int64:
+		return []float32{float32(typed)}, nil
+	default:
+		return nil, fmt.Errorf("float vector input has unsupported type %T", value)
+	}
+}
+
+func int32TokenVector(value any) ([]int32, error) {
+	switch typed := value.(type) {
+	case []int:
+		tokens := make([]int32, len(typed))
+
+		for index, tokenID := range typed {
+			if tokenID < minTokenInt32 || tokenID > maxTokenInt32 {
+				return nil, fmt.Errorf("token value %d overflows int32", tokenID)
+			}
+
+			tokens[index] = int32(tokenID)
+		}
+
+		return tokens, nil
+	case []int32:
+		return append([]int32(nil), typed...), nil
+	case []int64:
+		tokens := make([]int32, len(typed))
+
+		for index, tokenID := range typed {
+			if tokenID < minTokenInt32 || tokenID > maxTokenInt32 {
+				return nil, fmt.Errorf("token value %d overflows int32", tokenID)
+			}
+
+			tokens[index] = int32(tokenID)
+		}
+
+		return tokens, nil
+	case int:
+		if typed < minTokenInt32 || typed > maxTokenInt32 {
+			return nil, fmt.Errorf("token value %d overflows int32", typed)
+		}
+
+		return []int32{int32(typed)}, nil
+	case int32:
+		return []int32{typed}, nil
+	case int64:
+		if typed < minTokenInt32 || typed > maxTokenInt32 {
+			return nil, fmt.Errorf("token value %d overflows int32", typed)
+		}
+
+		return []int32{int32(typed)}, nil
+	default:
+		return nil, fmt.Errorf("token input has unsupported type %T", value)
 	}
 }
 

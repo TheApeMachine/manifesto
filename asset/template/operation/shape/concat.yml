@@ -20,3 +20,11 @@ config:
   - name: dim
     type: int
     description: Axis to concatenate along
+bind:
+  method: shape.concat
+  output:
+    dtype: input.a.dtype
+  args:
+    - ref: input.a
+    - ref: input.b
+    - ref: output.y.shape

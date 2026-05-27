@@ -62,6 +62,32 @@ func deriveEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings i
 	}, nil
 }
 
+func deriveTimestepEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	_ = bindings
+
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: embedding.timestep needs one input")
+	}
+
+	embeddingDim := configInt64(node, "dim")
+
+	if embeddingDim <= 0 {
+		return ir.PortType{}, fmt.Errorf("typer: embedding.timestep %q requires a positive dim config", node.ID)
+	}
+
+	dimensions := append([]ir.Dimension(nil), inputs[0].ShapeSchema.Dimensions...)
+	dimensions = append(dimensions, ir.Dimension{Static: embeddingDim})
+
+	return ir.PortType{
+		DType: dtype.Float32,
+		ShapeSchema: ir.ShapeSchema{
+			Dimensions: dimensions,
+		},
+		Layout: ir.LayoutContiguous,
+		Kind:   ir.SemanticHiddenState,
+	}, nil
+}
+
 func deriveNormOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	result, err := deriveSameAsFirstInput(ir.SemanticHiddenState)(node, inputs, bindings)
 
@@ -175,20 +201,14 @@ func bindNormSymbols(dimensions []ir.Dimension, bindings ir.SymbolMap) error {
 		}
 	}
 
-	if len(dimensions) == 1 {
+	if len(dimensions) != 2 {
 		return nil
 	}
 
-	leading := int64(1)
+	leading, err := dimensionInt(dimensions[0], bindings)
 
-	for _, dimension := range dimensions[:len(dimensions)-1] {
-		value, err := dimensionInt(dimension, bindings)
-
-		if err != nil {
-			return nil
-		}
-
-		leading *= value
+	if err != nil {
+		return nil
 	}
 
 	return bindSymbol(bindings, "N", leading)

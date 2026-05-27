@@ -389,6 +389,27 @@ func TestFloat32VectorAcceptsRawDeviceTensor(testingObject *testing.T) {
 	})
 }
 
+func TestFloat32VectorAcceptsRawDeviceBFloat16Tensor(testingObject *testing.T) {
+	convey.Convey("Given raw bytes from a device-resident bfloat16 tensor", testingObject, func() {
+		values := []float32{1.5, -2.25, 0.125}
+		deviceTensor := newRawDeviceTensor(
+			testingObject,
+			[]int{3},
+			dtype.BFloat16,
+			Float32AsDTypeBytes(values, dtype.BFloat16),
+		)
+
+		convey.Convey("It should decode through dtype conversion", func() {
+			decoded, err := float32Vector(context.Background(), deviceTensor)
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(decoded[0], convey.ShouldAlmostEqual, values[0], 1e-3)
+			convey.So(decoded[1], convey.ShouldAlmostEqual, values[1], 1e-3)
+			convey.So(decoded[2], convey.ShouldAlmostEqual, values[2], 1e-3)
+		})
+	})
+}
+
 func TestTopKWeightsUsesExp(testingObject *testing.T) {
 	convey.Convey("Given top-k candidates with large negative logit gaps", testingObject, func() {
 		candidates := []topKCandidate{

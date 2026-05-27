@@ -109,6 +109,7 @@ func Infer(graph *ast.Graph) (InferStats, []EdgeError, error) {
 			// so the planner's TopologyForPlanning sees a typed port
 			// (otherwise port.Type stays at the zero PortType and
 			// PortByteSize fails with "unsupported dtype 0").
+			node.InputTypes = bestEffortInputTypes(node, producerTypes)
 			fallback := bestEffortPassthrough(node, producerTypes)
 			node.OutputType = fallback
 			producerTypes[node.ID] = fallback
@@ -139,6 +140,25 @@ func Infer(graph *ast.Graph) (InferStats, []EdgeError, error) {
 	graph.Bindings = bindings
 
 	return stats, edgeErrors, nil
+}
+
+func bestEffortInputTypes(
+	node *ast.GraphNode,
+	producerTypes map[string]ir.PortType,
+) []ir.PortType {
+	inputTypes := make([]ir.PortType, 0, len(node.Inputs))
+
+	for _, inputName := range node.Inputs {
+		producerType, exists := producerTypes[inputName]
+
+		if !exists {
+			producerType = anyTensor()
+		}
+
+		inputTypes = append(inputTypes, producerType)
+	}
+
+	return inputTypes
 }
 
 func unifyNodeInputs(

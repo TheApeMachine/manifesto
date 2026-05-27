@@ -66,6 +66,8 @@ func (store *StateStore) initialize(declaration ast.StateDeclaration) (any, erro
 	switch declaration.Type {
 	case "counter":
 		return int64(0), nil
+	case "scalar":
+		return int64FromAny(declaration.Seed, 0), nil
 	case "tensor":
 		return store.initializeTensor(declaration)
 	case "paged_tensor":
@@ -286,11 +288,15 @@ func intFromMap(values map[string]any, key string, fallback int) int {
 Update applies state.update operations.
 */
 func (store *StateStore) Update(update string, target string) error {
-	if !strings.HasPrefix(target, "state.") {
-		return fmt.Errorf("state update target %q must start with state.", target)
+	name := target
+
+	if strings.HasPrefix(target, "state.") {
+		name = target[len("state."):]
 	}
 
-	name := target[len("state."):]
+	if name == "" {
+		return fmt.Errorf("state update target is required")
+	}
 
 	store.mu.Lock()
 	defer store.mu.Unlock()

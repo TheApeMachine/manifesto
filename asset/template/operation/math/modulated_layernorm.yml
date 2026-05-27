@@ -1,0 +1,55 @@
+kind: Operation
+category: math
+op: math.modulated_layernorm
+name: ModulatedLayerNorm
+label: Modulated Layer Norm
+description: Normalizes over the last dimension and applies per-batch shift and scale modulation.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+  - name: modulation
+    type: tensor
+    description: Packed shift, scale, and gate modulation tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Modulated normalized output
+config:
+  - name: eps
+    type: float
+    default: 1e-6
+    description: Numerical stability epsilon
+  - name: set
+    type: int
+    default: 0
+    description: Modulation set index
+bind:
+  method: ModulatedLayerNorm
+  config_struct: ModulatedLayerNormConfig
+  config_fields:
+    Epsilon:
+      ref: config.eps.float
+    Set:
+      ref: config.set.int
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: input.modulation.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      drop_tail: 1
+      product: true
+    - ref: input.x.shape
+      dim: -1
+    - ref: input.x.shape
+      drop_head: 1
+      drop_tail: 1
+      product: true
+    - ref: input.modulation.shape
+      dim: -1
+    - ref: input.x.dtype

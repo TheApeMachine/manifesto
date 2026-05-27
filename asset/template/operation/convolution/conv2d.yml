@@ -43,3 +43,52 @@ config:
   - name: groups
     type: int
     default: 1
+bind:
+  method: Conv2D
+  config_struct: Conv2DConfig
+  config_fields:
+    StrideH:
+      ref: config.stride_h.int
+    StrideW:
+      ref: config.stride_w.int
+    PaddingH:
+      ref: config.pad_h.int
+    PaddingW:
+      ref: config.pad_w.int
+    DilationH:
+      ref: config.dil_h.int
+    DilationW:
+      ref: config.dil_w.int
+  output:
+    shape:
+      - ref: input.x.shape
+        dim: 0
+      - ref: config.out_channels.int
+      - ref: input.x.shape
+        dim: 2
+        conv2d_output: height
+      - ref: input.x.shape
+        dim: 3
+        conv2d_output: width
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: weight.pointer
+    - ref: weight.bias.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: 1
+    - ref: input.x.shape
+      dim: 2
+    - ref: input.x.shape
+      dim: 3
+    - ref: config.out_channels.int
+    - ref: config.kernel_h.int
+    - ref: config.kernel_w.int
+    - ref: output.y.shape
+      dim: 2
+    - ref: output.y.shape
+      dim: 3
+    - ref: input.x.dtype

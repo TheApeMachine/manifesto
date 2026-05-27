@@ -14,6 +14,7 @@ import (
 BlockModel is a caramba model manifest block (topology + hub runtime metadata).
 */
 type BlockModel struct {
+	Inputs  []blockPort `yaml:"inputs"`
 	Outputs []blockPort `yaml:"outputs"`
 	System  blockSystem `yaml:"system"`
 }
@@ -116,7 +117,7 @@ func (block *BlockModel) TopologyAST() (*ast.Topology, error) {
 
 	if len(block.System.Topology.Nodes) > 0 {
 		return &ast.Topology{
-			Inputs:   block.System.Topology.Inputs,
+			Inputs:   block.inputList(),
 			Outputs:  block.outputMap(),
 			Nodes:    block.System.Topology.Nodes,
 			Bindings: block.System.Topology.Bindings,
@@ -146,6 +147,24 @@ func (block *BlockModel) outputMap() map[string]string {
 	}
 
 	return outputs
+}
+
+func (block *BlockModel) inputList() []string {
+	if len(block.System.Topology.Inputs) > 0 {
+		return append([]string(nil), block.System.Topology.Inputs...)
+	}
+
+	inputs := make([]string, 0, len(block.Inputs))
+
+	for _, input := range block.Inputs {
+		if input.Name == "" {
+			continue
+		}
+
+		inputs = append(inputs, input.Name)
+	}
+
+	return inputs
 }
 
 /*

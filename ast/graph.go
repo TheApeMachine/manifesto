@@ -48,6 +48,7 @@ BoundWeight attaches a loaded checkpoint tensor to a graph node.
 */
 type BoundWeight struct {
 	TensorName string
+	BiasName   string
 	Shape      []int64
 	DType      dtype.DType
 	Slice      *WeightSlice
