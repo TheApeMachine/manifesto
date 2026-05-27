@@ -24,6 +24,34 @@ config:
     type: float
     default: 10000
     description: Frequency base
+  - name: start_position
+    type: int
+    default: 0
+    description: Absolute position offset for manifests without a position tensor
+  - name: mode
+    type: string
+    default: interleaved
+    description: "Pair layout: interleaved or half"
+  - name: rope_type
+    type: string
+    default: none
+    description: Frequency scaling rule
+  - name: rope_factor
+    type: float
+    default: 1
+    description: Frequency scaling factor
+  - name: rope_low_freq_factor
+    type: float
+    default: 1
+    description: Llama 3 low-frequency scaling boundary
+  - name: rope_high_freq_factor
+    type: float
+    default: 4
+    description: Llama 3 high-frequency scaling boundary
+  - name: rope_original_context
+    type: int
+    default: 8192
+    description: Original context length for scaled RoPE
 bind:
   method: RoPE
   config_struct: RoPEConfig
@@ -32,6 +60,18 @@ bind:
       ref: config.base.float
     StartPosition:
       ref: config.start_position.int
+    Mode:
+      ref: config.mode.string
+    Scaling:
+      ref: config.rope_type.string
+    ScalingFactor:
+      ref: config.rope_factor.float
+    LowFreqFactor:
+      ref: config.rope_low_freq_factor.float
+    HighFreqFactor:
+      ref: config.rope_high_freq_factor.float
+    OriginalContext:
+      ref: config.rope_original_context.int
   output:
     shape:
       - ref: input.x.shape
@@ -54,6 +94,18 @@ bind:
       config_fields:
         BaseFreq:
           ref: config.base.float
+        Mode:
+          ref: config.mode.string
+        Scaling:
+          ref: config.rope_type.string
+        ScalingFactor:
+          ref: config.rope_factor.float
+        LowFreqFactor:
+          ref: config.rope_low_freq_factor.float
+        HighFreqFactor:
+          ref: config.rope_high_freq_factor.float
+        OriginalContext:
+          ref: config.rope_original_context.int
       output:
         shape:
           - ref: input.x.shape

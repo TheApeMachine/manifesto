@@ -20,6 +20,10 @@ config:
     description: Numerical stability epsilon
 bind:
   method: RMSNorm
+  config_struct: RMSNormConfig
+  config_fields:
+    Epsilon:
+      ref: config.eps.float
   output:
     shape:
       - ref: input.x.shape
