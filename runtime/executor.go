@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"sort"
 	"strings"
@@ -426,7 +427,12 @@ func (executor *Executor) runTopKSample(
 	temperature := float32FromConfig(step.Config, "temperature", 1.0)
 	topK := intFromConfig(step.Config, "top_k", 50)
 
-	tokenID := sampleTopK(logits, temperature, topK)
+	tokenID, err := sampleTopK(logits, temperature, topK)
+
+	if err != nil {
+		return err
+	}
+
 	stopTokenIDs := intSliceFromConfig(step.Config, "stop_token_ids")
 
 	for _, stopTokenID := range stopTokenIDs {
@@ -825,24 +831,28 @@ func (executor *Executor) resolveValue(reference string, values map[string]any) 
 	return value, nil
 }
 
-func sampleTopK(logits []float32, temperature float32, topK int) int {
+type topKCandidate struct {
+	index int
+	value float32
+}
+
+func sampleTopK(logits []float32, temperature float32, topK int) (int, error) {
 	if len(logits) == 0 {
-		return 0
+		return 0, fmt.Errorf("sampling.topk_sample: logits are empty")
+	}
+
+	if !(temperature > 0) {
+		return 0, fmt.Errorf("sampling.topk_sample: temperature must be positive")
 	}
 
 	if topK <= 0 || topK > len(logits) {
 		topK = len(logits)
 	}
 
-	type scored struct {
-		index int
-		value float32
-	}
-
-	scores := make([]scored, len(logits))
+	scores := make([]topKCandidate, len(logits))
 
 	for index, value := range logits {
-		scores[index] = scored{index: index, value: value}
+		scores[index] = topKCandidate{index: index, value: value}
 	}
 
 	sort.Slice(scores, func(left, right int) bool {
@@ -850,44 +860,33 @@ func sampleTopK(logits []float32, temperature float32, topK int) int {
 	})
 
 	candidates := scores[:topK]
+	weights, sum := topKWeights(candidates, temperature)
+	threshold := rand.Float64() * sum
+	accumulator := 0.0
+
+	for index, weight := range weights {
+		accumulator += weight
+
+		if accumulator >= threshold {
+			return candidates[index].index, nil
+		}
+	}
+
+	return candidates[len(candidates)-1].index, nil
+}
+
+func topKWeights(candidates []topKCandidate, temperature float32) ([]float64, float64) {
 	maxLogit := candidates[0].value
 	weights := make([]float64, len(candidates))
 	sum := 0.0
 
 	for index, candidate := range candidates {
 		scaled := float64((candidate.value - maxLogit) / temperature)
-		weights[index] = mathExp(scaled)
+		weights[index] = math.Exp(scaled)
 		sum += weights[index]
 	}
 
-	threshold := rand.Float64() * sum
-	acc := 0.0
-
-	for index, weight := range weights {
-		acc += weight
-
-		if acc >= threshold {
-			return candidates[index].index
-		}
-	}
-
-	return candidates[len(candidates)-1].index
-}
-
-func mathExp(value float64) float64 {
-	if value < -64 {
-		return 0
-	}
-
-	result := 1.0
-	term := 1.0
-
-	for termIndex := 1; termIndex <= 12; termIndex++ {
-		term *= value / float64(termIndex)
-		result += term
-	}
-
-	return result
+	return weights, sum
 }
 
 func parseRepeatCount(text string) (int, error) {

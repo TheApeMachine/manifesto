@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/smartystreets/goconvey/convey"
@@ -361,6 +362,32 @@ func TestExecutorRunTopKSampleAcceptsTensorLogits(testingObject *testing.T) {
 
 			convey.So(err, convey.ShouldBeNil)
 		})
+	})
+}
+
+func TestTopKWeightsUsesExp(testingObject *testing.T) {
+	convey.Convey("Given top-k candidates with large negative logit gaps", testingObject, func() {
+		candidates := []topKCandidate{
+			{index: 0, value: 0},
+			{index: 1, value: -20},
+			{index: 2, value: -40},
+		}
+
+		weights, sum := topKWeights(candidates, 1)
+
+		convey.So(weights[0], convey.ShouldEqual, 1)
+		convey.So(weights[1], convey.ShouldAlmostEqual, math.Exp(-20), 1e-18)
+		convey.So(weights[2], convey.ShouldAlmostEqual, math.Exp(-40), 1e-25)
+		convey.So(sum, convey.ShouldAlmostEqual, 1+math.Exp(-20)+math.Exp(-40), 1e-18)
+	})
+}
+
+func TestSampleTopKRejectsInvalidTemperature(testingObject *testing.T) {
+	convey.Convey("Given top-k sampling with nonpositive temperature", testingObject, func() {
+		_, err := sampleTopK([]float32{1, 0}, 0, 2)
+
+		convey.So(err, convey.ShouldNotBeNil)
+		convey.So(err.Error(), convey.ShouldContainSubstring, "temperature must be positive")
 	})
 }
 
