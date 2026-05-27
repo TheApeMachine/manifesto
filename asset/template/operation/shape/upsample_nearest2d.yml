@@ -1,0 +1,27 @@
+kind: Operation
+category: shape
+op: shape.upsample_nearest2d
+name: UpsampleNearest2D
+label: Nearest Upsample 2D
+description: Nearest-neighbor upsampling for row-major NCHW tensors.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor [N, C, H, W]
+outputs:
+  - name: y
+    type: tensor
+    description: Output tensor [N, C, H * scale_h, W * scale_w]
+config:
+  - name: scale_h
+    type: int
+  - name: scale_w
+    type: int
+bind:
+  method: shape.upsample_nearest2d
+  output:
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

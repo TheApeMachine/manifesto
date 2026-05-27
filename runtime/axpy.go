@@ -1,14 +1,98 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/dtype/convert"
 	"github.com/theapemachine/manifesto/tensor"
 )
 
+type axpyDevice interface {
+	Axpy(y, x unsafe.Pointer, count int, alpha float32, format dtype.DType)
+}
+
+type dispatchPointerTensor interface {
+	tensor.Tensor
+	DispatchPointer() unsafe.Pointer
+}
+
 func axpyOnto(
+	ctx context.Context,
+	memory tensor.Backend,
+	target any,
+	addend any,
+	alpha float32,
+) (any, error) {
+	resident, ok, err := axpyOntoResident(memory, target, addend, alpha)
+
+	if err != nil || ok {
+		return resident, err
+	}
+
+	addendVector, err := float32Vector(ctx, addend)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return axpyOntoHost(memory, target, addendVector, alpha)
+}
+
+func axpyOntoResident(
+	memory tensor.Backend,
+	target any,
+	addend any,
+	alpha float32,
+) (any, bool, error) {
+	device, ok := memory.(axpyDevice)
+
+	if !ok {
+		return nil, false, nil
+	}
+
+	targetTensor, ok := target.(dispatchPointerTensor)
+
+	if !ok {
+		return nil, false, nil
+	}
+
+	addendTensor, ok := addend.(dispatchPointerTensor)
+
+	if !ok {
+		return nil, false, nil
+	}
+
+	if targetTensor.Location() != memory.Location() || addendTensor.Location() != memory.Location() {
+		return nil, true, fmt.Errorf("math.axpy: tensor location does not match backend")
+	}
+
+	if targetTensor.DType() != addendTensor.DType() {
+		return nil, true, fmt.Errorf("math.axpy: y dtype %s does not match x dtype %s", targetTensor.DType(), addendTensor.DType())
+	}
+
+	if targetTensor.Len() != addendTensor.Len() {
+		return nil, true, fmt.Errorf(
+			"math.axpy: y length %d does not match x length %d",
+			targetTensor.Len(),
+			addendTensor.Len(),
+		)
+	}
+
+	device.Axpy(
+		targetTensor.DispatchPointer(),
+		addendTensor.DispatchPointer(),
+		targetTensor.Len(),
+		alpha,
+		targetTensor.DType(),
+	)
+
+	return targetTensor, true, nil
+}
+
+func axpyOntoHost(
 	memory tensor.Backend,
 	target any,
 	addend []float32,

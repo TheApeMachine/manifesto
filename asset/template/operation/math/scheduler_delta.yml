@@ -1,0 +1,18 @@
+kind: Operation
+category: math
+op: math.scheduler_delta
+name: SchedulerDelta
+label: Scheduler Delta
+description: Reads a scalar delta from a one-dimensional schedule.
+initial_width: 180
+inputs:
+  - name: schedule
+    type: tensor
+    description: One-dimensional floating schedule.
+  - name: step_index
+    type: scalar
+    description: Zero-based schedule index.
+outputs:
+  - name: delta
+    type: scalar
+    description: Next schedule value minus current schedule value.

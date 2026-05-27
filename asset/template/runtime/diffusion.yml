@@ -14,10 +14,10 @@ include:
   vae_decoder: hf://black-forest-labs/FLUX.2-klein-4B#vae
 
 variables:
-  height: 256
-  width: 256
+  height: 1024
+  width: 1024
   num_inference_steps: 4
-  guidance_scale: 1.0
+  guidance_scale: 4.0
   in_channels: 128
   context_seq_len: 1024
   latent_seq_len: 4096
@@ -73,15 +73,33 @@ main:
       dtype: float32
     out: state.latents
 
-  # 5) Build the sigma schedule: linspace(1, 0, num_inference_steps).
+  # 5) Build the shifted sigma schedule used by the denoiser.
   - op: math.linspace
     config:
       start: 1.0
       stop: 0.0
       count: $variables.num_inference_steps
-    out: state.sigmas
+      endpoint: false
+    out: raw_sigmas
 
-  # 6) Compute timesteps from sigmas (sigma * num_train_timesteps).
+  - op: math.empirical_mu
+    config:
+      image_seq_len: $variables.latent_seq_len
+      num_steps: $variables.num_inference_steps
+    out:
+      value: shift_mu
+
+  - in:
+      x: raw_sigmas
+      mu: shift_mu
+    op: math.time_shift
+    config:
+      mode: exponential
+      sigma: 1.0
+    out:
+      value: state.sigmas
+
+  # 6) Compute timesteps from shifted sigmas (sigma * num_train_timesteps).
   - in:
       x: state.sigmas
     op: math.scalar_broadcast
@@ -92,6 +110,23 @@ main:
       value: state.timesteps
       loop: timesteps
 
+  - op: math.linspace
+    config:
+      start: $variables.guidance_scale
+      stop: $variables.guidance_scale
+      count: 1
+    out:
+      value: guidance_scale
+
+  - in:
+      x: guidance_scale
+    op: math.scalar_broadcast
+    config:
+      op: mul
+      scalar: 1000.0
+    out:
+      value: guidance_timestep
+
   # 7) Denoising loop.
   - op: control.loop_each
     source: timesteps
@@ -101,15 +136,25 @@ main:
           hidden_states: state.latents
           encoder_hidden_states: state.text_embedding
           timestep: timestep
+          guidance: guidance_timestep
         op: graph.call
         graph: transformer
         out:
           sample: noise_pred
 
       - in:
+          schedule: state.sigmas
+          step_index: state.step_index
+        op: math.scheduler_delta
+        config:
+          terminal: 0.0
+        out:
+          delta: sigma_delta
+
+      - in:
           y: state.latents
           x: noise_pred
-          alpha: state.step_index
+          alpha: sigma_delta
         op: math.axpy
         out: state.latents
 

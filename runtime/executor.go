@@ -177,8 +177,14 @@ func (executor *Executor) runStep(
 		return executor.runAxpy(ctx, step, values)
 	case "math.linspace":
 		return executor.runLinspace(step, values)
+	case "math.empirical_mu":
+		return executor.runEmpiricalMu(step, values)
+	case "math.time_shift":
+		return executor.runTimeShift(ctx, step, values)
 	case "math.scalar_broadcast":
 		return executor.runScalarBroadcast(ctx, step, values)
+	case "math.scheduler_delta":
+		return executor.runSchedulerDelta(ctx, step, values)
 	case "random.normal":
 		return executor.runRandomNormal(step, values)
 	case "state.update":
@@ -511,15 +517,9 @@ func (executor *Executor) runAxpy(
 		return err
 	}
 
-	addend, err := float32Vector(ctx, xValue)
-
-	if err != nil {
-		return err
-	}
-
 	alpha := float32FromAny(alphaValue, 0)
 
-	updated, err := axpyOnto(executor.stateMemory, yValue, addend, alpha)
+	updated, err := axpyOnto(ctx, executor.stateMemory, yValue, xValue, alpha)
 
 	if err != nil {
 		return err

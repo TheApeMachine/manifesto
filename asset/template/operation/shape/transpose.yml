@@ -20,3 +20,10 @@ config:
   - name: dim1
     type: int
     description: Second dimension to swap
+bind:
+  method: shape.transpose
+  output:
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

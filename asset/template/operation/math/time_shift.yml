@@ -1,0 +1,27 @@
+kind: Operation
+category: math
+op: math.time_shift
+name: TimeShift
+label: Time Shift
+description: Applies a scalar time-shift transform to a one-dimensional schedule.
+initial_width: 180
+inputs:
+  - name: x
+    type: tensor
+    description: One-dimensional floating schedule.
+  - name: mu
+    type: scalar
+    description: Shift scalar.
+outputs:
+  - name: value
+    type: tensor
+    description: Shifted schedule.
+config:
+  - name: mode
+    type: string
+    default: exponential
+    description: Shift mode, exponential or linear.
+  - name: sigma
+    type: float
+    default: 1
+    description: Schedule exponent.

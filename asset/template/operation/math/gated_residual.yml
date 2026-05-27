@@ -1,0 +1,37 @@
+kind: Operation
+category: math
+op: math.gated_residual
+name: GatedResidual
+label: Gated Residual
+description: Applies residual + gate * branch with gate read from a packed modulation tensor.
+initial_width: 220
+inputs:
+  - name: residual
+    type: tensor
+    description: Residual tensor
+  - name: branch
+    type: tensor
+    description: Branch tensor
+  - name: modulation
+    type: tensor
+    description: Packed shift, scale, and gate modulation tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Gated residual output
+config:
+  - name: set
+    type: int
+    default: 0
+    description: Modulation set index
+bind:
+  method: math.gated_residual
+  output:
+    shape:
+      - ref: input.residual.shape
+    dtype: input.residual.dtype
+  args:
+    - ref: input.residual
+    - ref: input.branch
+    - ref: input.modulation
+    - ref: output.y.shape

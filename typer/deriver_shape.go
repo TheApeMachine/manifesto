@@ -164,6 +164,90 @@ func deriveConcatOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 	return result, nil
 }
 
+func deriveSliceOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.slice needs one input")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+	axis, err := canonicalAxis(configInt64(node, "dim"), len(dimensions))
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.slice dim: %w", err)
+	}
+
+	dimSize, err := dimensionInt(dimensions[axis], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.slice dim %d: %w", axis, err)
+	}
+
+	start := configInt64(node, "start")
+	end := configInt64(node, "end")
+
+	if end == 0 {
+		end = dimSize
+	}
+
+	if start < 0 || end < start || end > dimSize {
+		return ir.PortType{}, fmt.Errorf(
+			"typer: shape.slice range [%d:%d) out of bounds for dim %d size %d",
+			start,
+			end,
+			axis,
+			dimSize,
+		)
+	}
+
+	outputDimensions := append([]ir.Dimension(nil), dimensions...)
+	outputDimensions[axis] = ir.Dimension{Static: end - start}
+
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{Dimensions: outputDimensions}
+
+	return result, nil
+}
+
+func deriveUpsampleNearest2DOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) < 1 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.upsample_nearest2d needs one input")
+	}
+
+	dimensions := inputs[0].ShapeSchema.Dimensions
+
+	if len(dimensions) != 4 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.upsample_nearest2d input rank must be 4")
+	}
+
+	scaleH := configInt64(node, "scale_h")
+	scaleW := configInt64(node, "scale_w")
+
+	if scaleH <= 0 || scaleW <= 0 {
+		return ir.PortType{}, fmt.Errorf("typer: shape.upsample_nearest2d requires positive scales")
+	}
+
+	inputHeight, err := dimensionInt(dimensions[2], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.upsample_nearest2d height: %w", err)
+	}
+
+	inputWidth, err := dimensionInt(dimensions[3], bindings)
+
+	if err != nil {
+		return ir.PortType{}, fmt.Errorf("typer: shape.upsample_nearest2d width: %w", err)
+	}
+
+	outputDimensions := append([]ir.Dimension(nil), dimensions...)
+	outputDimensions[2] = ir.Dimension{Static: inputHeight * scaleH}
+	outputDimensions[3] = ir.Dimension{Static: inputWidth * scaleW}
+
+	result := inputs[0]
+	result.ShapeSchema = ir.ShapeSchema{Dimensions: outputDimensions}
+
+	return result, nil
+}
+
 func canonicalAxis(axis int64, rank int) (int, error) {
 	if rank == 0 {
 		return 0, fmt.Errorf("rank 0 tensor")

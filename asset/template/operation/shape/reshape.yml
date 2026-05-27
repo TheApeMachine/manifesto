@@ -17,3 +17,12 @@ config:
   - name: shape
     type: int[]
     description: Target shape dimensions
+bind:
+  method: shape.reshape
+  output:
+    shape:
+      - ref: config.shape.ints
+    dtype: input.x.dtype
+  args:
+    - ref: input.x
+    - ref: output.y.shape

@@ -1,0 +1,44 @@
+kind: Operation
+category: math
+op: math.groupnorm
+name: GroupNorm
+label: Group Norm
+description: Normalizes NCHW tensors across channel groups and applies affine scale and bias.
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor [N, C, ...]
+outputs:
+  - name: y
+    type: tensor
+    description: Normalized output tensor
+config:
+  - name: groups
+    type: int
+  - name: eps
+    type: float
+    default: 1e-5
+bind:
+  method: GroupNorm
+  config_struct: GroupNormConfig
+  config_fields:
+    Groups:
+      ref: config.groups.int
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: weight.pointer
+    - ref: weight.bias.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: 1
+    - ref: input.x.shape
+      drop_head: 2
+      product: true
+    - ref: input.x.dtype

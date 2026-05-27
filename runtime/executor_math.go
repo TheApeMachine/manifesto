@@ -87,14 +87,22 @@ func (executor *Executor) runLinspace(
 		return executor.writeLinspaceOutput(values, step, output)
 	}
 
-	stepSize := (stop - start) / float32(count-1)
+	intervals := count - 1
+
+	if endpoint, ok := step.Config["endpoint"].(bool); ok && !endpoint {
+		intervals = count
+	}
+
+	stepSize := (stop - start) / float32(intervals)
 
 	for outputIndex := range output {
 		output[outputIndex] = start + float32(outputIndex)*stepSize
 	}
 
-	output[0] = start
-	output[count-1] = stop
+	if intervals == count-1 {
+		output[0] = start
+		output[count-1] = stop
+	}
 
 	return executor.writeLinspaceOutput(values, step, output)
 }

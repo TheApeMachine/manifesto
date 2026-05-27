@@ -152,6 +152,363 @@ func TestInferDerivesConcatOutputShape(t *testing.T) {
 	})
 }
 
+func TestInferDerivesSliceOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-3 tensor sliced across sequence", t, func() {
+		RegisterSpec("test.emit_slice_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 2},
+							{Static: 7},
+							{Static: 3},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_slice_source", Inputs: []string{"x"}},
+				{
+					ID:     "sliced",
+					Op:     "shape.slice",
+					Inputs: []string{"source"},
+					Attributes: map[string]any{
+						"dim":   1,
+						"start": 2,
+						"end":   0,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then the selected axis length is derived statically", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 3)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 2)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 5)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 3)
+		})
+	})
+}
+
+func TestInferDerivesTransposeOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-4 tensor transposed across spatial and channel axes", t, func() {
+		RegisterSpec("test.emit_transpose_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 16},
+							{Static: 16},
+							{Static: 128},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_transpose_source", Inputs: []string{"x"}},
+				{
+					ID:     "transposed",
+					Op:     "shape.transpose",
+					Inputs: []string{"source"},
+					Attributes: map[string]any{
+						"dim0": 2,
+						"dim1": 3,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then the selected dimensions are swapped", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 16)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 128)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 16)
+		})
+	})
+}
+
+func TestInferDerivesReshapeOutputShapeFromYAMLConfig(t *testing.T) {
+	convey.Convey("Given a rank-3 latent tensor reshaped from YAML config values", t, func() {
+		graph := &ast.Graph{
+			Inputs: []string{"latents"},
+			Bindings: ir.SymbolMap{
+				"B": 1,
+				"T": 4096,
+				"D": 128,
+			},
+			Nodes: []*ast.GraphNode{
+				{
+					ID:     "packed_grid",
+					Op:     "shape.reshape",
+					Inputs: []string{"latents"},
+					Attributes: map[string]any{
+						"shape": []any{1, "64", int64(64), 128},
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then the planned output has the requested rank-4 shape", func() {
+			outputDimensions := graph.Nodes[0].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 64)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 64)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 128)
+		})
+	})
+}
+
+func TestInferDerivesBatchNormDenormOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-4 tensor feeding BatchNormDenorm", t, func() {
+		RegisterSpec("test.emit_batchnorm_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 32},
+							{Static: 128},
+							{Static: 128},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_batchnorm_source", Inputs: []string{"x"}},
+				{
+					ID:     "norm",
+					Op:     "math.batchnorm_denorm",
+					Inputs: []string{"source"},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output preserves the source dimensions", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 32)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 128)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 128)
+		})
+	})
+}
+
+func TestInferDerivesGroupNormOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-4 tensor feeding GroupNorm", t, func() {
+		RegisterSpec("test.emit_groupnorm_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 512},
+							{Static: 128},
+							{Static: 128},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_groupnorm_source", Inputs: []string{"x"}},
+				{
+					ID:     "norm",
+					Op:     "math.groupnorm",
+					Inputs: []string{"source"},
+					Attributes: map[string]any{
+						"groups": 32,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output preserves the source dimensions", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 512)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 128)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 128)
+		})
+	})
+}
+
+func TestInferDerivesUpsampleNearest2DOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-4 tensor feeding nearest upsample", t, func() {
+		RegisterSpec("test.emit_upsample_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 512},
+							{Static: 64},
+							{Static: 64},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_upsample_source", Inputs: []string{"x"}},
+				{
+					ID:     "up",
+					Op:     "shape.upsample_nearest2d",
+					Inputs: []string{"source"},
+					Attributes: map[string]any{
+						"scale_h": 2,
+						"scale_w": 2,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output scales the spatial dimensions", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 512)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 128)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 128)
+		})
+	})
+}
+
+func TestInferDerivesConv2DOutputShape(t *testing.T) {
+	convey.Convey("Given a rank-4 tensor feeding Conv2D", t, func() {
+		RegisterSpec("test.emit_conv2d_source", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 32},
+							{Static: 128},
+							{Static: 128},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "source", Op: "test.emit_conv2d_source", Inputs: []string{"x"}},
+				{
+					ID:     "conv",
+					Op:     "convolution.conv2d",
+					Inputs: []string{"source"},
+					Attributes: map[string]any{
+						"out_channels": 512,
+						"kernel_h":     3,
+						"kernel_w":     3,
+						"stride_h":     1,
+						"stride_w":     1,
+						"pad_h":        1,
+						"pad_w":        1,
+						"dil_h":        1,
+						"dil_w":        1,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output uses the configured channels and derived spatial shape", func() {
+			outputDimensions := graph.Nodes[1].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 512)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 128)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 128)
+		})
+	})
+}
+
 func TestInferDerivesBatchedEmbeddingOutputShape(t *testing.T) {
 	convey.Convey("Given input_ids at a graph boundary", t, func() {
 		graph := &ast.Graph{
@@ -280,6 +637,74 @@ func TestInferDerivesModulatedLayerNormOutputShape(t *testing.T) {
 	})
 }
 
+func TestInferDerivesGatedResidualOutputShape(t *testing.T) {
+	convey.Convey("Given hidden states and modulation feeding GatedResidual", t, func() {
+		RegisterSpec("test.emit_gated_hidden", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 2},
+							{Static: 3},
+							{Static: 4},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+					Kind:   ir.SemanticHiddenState,
+				}, nil
+			},
+		})
+		RegisterSpec("test.emit_gated_modulation", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 2},
+							{Static: 24},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "residual", Op: "test.emit_gated_hidden", Inputs: []string{"x"}},
+				{ID: "branch", Op: "test.emit_gated_hidden", Inputs: []string{"x"}},
+				{ID: "modulation", Op: "test.emit_gated_modulation", Inputs: []string{"x"}},
+				{
+					ID:     "merged",
+					Op:     "math.gated_residual",
+					Inputs: []string{"residual", "branch", "modulation"},
+					Attributes: map[string]any{
+						"set": 1,
+					},
+				},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output preserves the residual shape", func() {
+			outputDimensions := graph.Nodes[3].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 3)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 2)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 3)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 4)
+		})
+	})
+}
+
 func TestInferDerivesMultiAxisRoPEOutputShape(t *testing.T) {
 	convey.Convey("Given headed hidden states feeding MultiAxisRoPE", t, func() {
 		RegisterSpec("test.emit_headed_hidden", OpSpec{
@@ -326,6 +751,54 @@ func TestInferDerivesMultiAxisRoPEOutputShape(t *testing.T) {
 			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 8)
 			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 2)
 			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 8)
+		})
+	})
+}
+
+func TestInferDerivesSDPAOutputShape(t *testing.T) {
+	convey.Convey("Given headed query, key, and value tensors feeding SDPA", t, func() {
+		RegisterSpec("test.emit_attention_input", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.Float32,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 1},
+							{Static: 8},
+							{Static: 2},
+							{Static: 4},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+					Kind:   ir.SemanticHiddenState,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "q", Op: "test.emit_attention_input", Inputs: []string{"x"}},
+				{ID: "k", Op: "test.emit_attention_input", Inputs: []string{"x"}},
+				{ID: "v", Op: "test.emit_attention_input", Inputs: []string{"x"}},
+				{ID: "attn", Op: "attention.sdpa", Inputs: []string{"q", "k", "v"}},
+			},
+		}
+
+		_, edgeErrors, err := Infer(graph)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(edgeErrors, convey.ShouldBeEmpty)
+
+		convey.Convey("Then output preserves the query shape", func() {
+			outputDimensions := graph.Nodes[3].OutputType.ShapeSchema.Dimensions
+
+			convey.So(len(outputDimensions), convey.ShouldEqual, 4)
+			convey.So(outputDimensions[0].Static, convey.ShouldEqual, 1)
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 8)
+			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 2)
+			convey.So(outputDimensions[3].Static, convey.ShouldEqual, 4)
 		})
 	})
 }

@@ -108,6 +108,79 @@ func deriveNormOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.Sym
 	return result, nil
 }
 
+func deriveGatedResidualOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+	if len(inputs) != 3 {
+		return ir.PortType{}, fmt.Errorf("typer: math.gated_residual needs three inputs")
+	}
+
+	residual := inputs[0]
+	branch := inputs[1]
+
+	if len(residual.ShapeSchema.Dimensions) != len(branch.ShapeSchema.Dimensions) {
+		return ir.PortType{}, fmt.Errorf("typer: math.gated_residual rank mismatch")
+	}
+
+	for index := range residual.ShapeSchema.Dimensions {
+		if dimensionsMatch(residual.ShapeSchema.Dimensions[index], branch.ShapeSchema.Dimensions[index], bindings) {
+			continue
+		}
+
+		return ir.PortType{}, fmt.Errorf("typer: math.gated_residual dim %d mismatch", index)
+	}
+
+	if err := validateGatedResidualModulation(node, residual, inputs[2], bindings); err != nil {
+		return ir.PortType{}, err
+	}
+
+	result := residual
+	result.Kind = ir.SemanticHiddenState
+
+	return result, nil
+}
+
+func validateGatedResidualModulation(
+	node *ast.GraphNode,
+	residual ir.PortType,
+	modulation ir.PortType,
+	bindings ir.SymbolMap,
+) error {
+	residualDims := residual.ShapeSchema.Dimensions
+
+	if len(residualDims) == 0 {
+		return fmt.Errorf("typer: math.gated_residual residual rank 0")
+	}
+
+	modulationDims := modulation.ShapeSchema.Dimensions
+
+	if len(modulationDims) == 0 {
+		return fmt.Errorf("typer: math.gated_residual modulation rank 0")
+	}
+
+	lastDim, err := dimensionInt(residualDims[len(residualDims)-1], bindings)
+
+	if err != nil {
+		return fmt.Errorf("typer: math.gated_residual last dim: %w", err)
+	}
+
+	modulationCols, err := dimensionInt(modulationDims[len(modulationDims)-1], bindings)
+
+	if err != nil {
+		return fmt.Errorf("typer: math.gated_residual modulation cols: %w", err)
+	}
+
+	requiredCols := (configInt64(node, "set")*3 + 3) * lastDim
+
+	if modulationCols < requiredCols {
+		return fmt.Errorf(
+			"typer: math.gated_residual modulation width %d is smaller than %d",
+			modulationCols,
+			requiredCols,
+		)
+	}
+
+	return nil
+}
+
 func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
 	_ = bindings
 

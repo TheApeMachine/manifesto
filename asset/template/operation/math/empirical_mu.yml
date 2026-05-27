@@ -1,0 +1,46 @@
+kind: Operation
+category: math
+op: math.empirical_mu
+name: EmpiricalMu
+label: Empirical Mu
+description: Computes a scalar schedule shift from sequence length and step count.
+initial_width: 180
+outputs:
+  - name: value
+    type: scalar
+    description: Shift scalar.
+config:
+  - name: image_seq_len
+    type: float
+    description: Schedule sequence length.
+  - name: num_steps
+    type: float
+    description: Number of inference steps.
+  - name: low_step
+    type: float
+    default: 10
+    description: Lower calibration step count.
+  - name: high_step
+    type: float
+    default: 200
+    description: Upper calibration step count.
+  - name: threshold
+    type: float
+    default: 4300
+    description: Sequence length where the high-step curve is used directly.
+  - name: low_slope
+    type: float
+    default: 0.0000873809524
+    description: Lower calibration slope.
+  - name: low_intercept
+    type: float
+    default: 1.89833333
+    description: Lower calibration intercept.
+  - name: high_slope
+    type: float
+    default: 0.00016927
+    description: Upper calibration slope.
+  - name: high_intercept
+    type: float
+    default: 0.45666666
+    description: Upper calibration intercept.

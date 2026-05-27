@@ -27,7 +27,7 @@
 #   dual_terminal_index     `${num_layers}` as a literal — used to wire the
 #                           handoff between dual and single stream sections
 #   joint_terminal_index    `${num_layers} + ${num_single_layers}` as a literal
-inputs: [hidden_states, encoder_hidden_states, timestep]
+inputs: [hidden_states, encoder_hidden_states, timestep, guidance]
 nodes:
   - id: time_guidance_embed.time_proj
     op: embedding.timestep
@@ -38,7 +38,7 @@ nodes:
       flip_sin_to_cos: true
       downscale_freq_shift: 0
       max_period: 10000
-      timestep_divisor: 1000
+      timestep_divisor: 1
 
   - id: time_guidance_embed.timestep_embedder.linear_1
     op: projection.linear
@@ -56,10 +56,47 @@ nodes:
   - id: time_guidance_embed.timestep_embedder.linear_2
     op: projection.linear
     in: [timestep_activated]
-    out: [temb]
+    out: [timestep_embedding]
     config:
       in_features: ${include.hidden_size}
       out_features: ${include.hidden_size}
+
+  - id: time_guidance_embed.guidance_proj
+    op: embedding.timestep
+    in: [guidance]
+    out: [guidance_projection]
+    config:
+      dim: 256
+      flip_sin_to_cos: true
+      downscale_freq_shift: 0
+      max_period: 10000
+      timestep_divisor: 1
+
+  - id: time_guidance_embed.guidance_embedder.linear_1
+    op: projection.linear
+    in: [guidance_projection]
+    out: [guidance_hidden]
+    config:
+      in_features: 256
+      out_features: ${include.hidden_size}
+
+  - id: time_guidance_embed.guidance_embedder.act
+    op: activation.swish
+    in: [guidance_hidden]
+    out: [guidance_activated]
+
+  - id: time_guidance_embed.guidance_embedder.linear_2
+    op: projection.linear
+    in: [guidance_activated]
+    out: [guidance_embedding]
+    config:
+      in_features: ${include.hidden_size}
+      out_features: ${include.hidden_size}
+
+  - id: time_guidance_embed.combine
+    op: math.add
+    in: [timestep_embedding, guidance_embedding]
+    out: [temb]
 
   - id: single_stream_modulation.act
     op: activation.swish

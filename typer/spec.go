@@ -96,12 +96,36 @@ var specTable = map[string]OpSpec{
 		},
 		OutputDeriver: deriveNormOutput,
 	},
+	"math.groupnorm": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+		},
+		WeightTypes: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
 	"math.modulated_layernorm": {
 		Inputs: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 			anyTensor(),
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"math.batchnorm_denorm": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+		},
+		WeightTypes: []ir.PortType{
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
+			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"math.gated_residual": {
+		Inputs:        []ir.PortType{anyTensor(), anyTensor(), anyTensor()},
+		OutputDeriver: deriveGatedResidualOutput,
 	},
 	"projection.linear": {
 		Inputs: []ir.PortType{
@@ -118,6 +142,12 @@ var specTable = map[string]OpSpec{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("K", "N"), Layout: ir.LayoutContiguous},
 		},
 		OutputDeriver: deriveMatmulOutput,
+	},
+	"convolution.conv2d": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+		},
+		OutputDeriver: deriveConv2DOutput,
 	},
 	"math.add": binaryElementwiseSpec(),
 	"math.sub": binaryElementwiseSpec(),
@@ -148,6 +178,14 @@ var specTable = map[string]OpSpec{
 	"shape.concat": {
 		Inputs:        []ir.PortType{anyTensor(), anyTensor()},
 		OutputDeriver: deriveConcatOutput,
+	},
+	"shape.slice": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveSliceOutput,
+	},
+	"shape.upsample_nearest2d": {
+		Inputs:        []ir.PortType{anyTensor()},
+		OutputDeriver: deriveUpsampleNearest2DOutput,
 	},
 	"shape.last_token": {
 		Inputs:        []ir.PortType{anyTensor()},
@@ -186,6 +224,10 @@ var specTable = map[string]OpSpec{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
+	},
+	"attention.sdpa": {
+		Inputs:        []ir.PortType{anyTensor(), anyTensor(), anyTensor()},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},
 

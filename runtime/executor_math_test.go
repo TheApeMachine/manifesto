@@ -138,6 +138,89 @@ func TestExecutorRunLinspaceScalarBroadcast(testingObject *testing.T) {
 	})
 }
 
+func TestExecutorRunSchedulerDelta(testingObject *testing.T) {
+	convey.Convey("Given endpoint-excluded sigmas feeding scheduler_delta", testingObject, func() {
+		state, err := NewStateStore([]ast.StateDeclaration{
+			{
+				Name:  "sigmas",
+				Type:  "tensor",
+				Shape: []any{4},
+			},
+			{
+				Name: "step_index",
+				Type: "counter",
+			},
+		})
+		convey.So(err, convey.ShouldBeNil)
+
+		backend := &graphCaptureBackend{}
+		executor := NewExecutor(ExecutorOptions{
+			Backend:        backend,
+			State:          state,
+			StateMemory:    tensor.NewHostBackend(),
+			ExecutionDType: dtype.Float32,
+		})
+		program := &ast.Program{
+			Steps: []ast.Step{
+				{
+					Op: "math.linspace",
+					Config: map[string]any{
+						"start":    1.0,
+						"stop":     0.0,
+						"count":    4,
+						"endpoint": false,
+					},
+					Out: map[string]string{
+						"value": "state.sigmas",
+					},
+				},
+				{
+					Op: "math.scheduler_delta",
+					In: map[string]string{
+						"schedule":   "state.sigmas",
+						"step_index": "state.step_index",
+					},
+					Config: map[string]any{
+						"terminal": 0.0,
+					},
+					Out: map[string]string{
+						"delta": "sigma_delta",
+					},
+				},
+				{
+					Op:    "graph.call",
+					Graph: "capture",
+					In: map[string]string{
+						"alpha": "sigma_delta",
+					},
+				},
+			},
+		}
+		graphs := map[string]*ast.Graph{
+			"capture": {
+				Outputs: map[string]string{"sample": "sample"},
+			},
+		}
+
+		convey.Convey("It should return the delta from the current sigma to the next sigma", func() {
+			err := executor.Run(context.Background(), program, graphs, map[string]any{"capture": "compute"})
+			convey.So(err, convey.ShouldBeNil)
+
+			sigmas := stateTensorValues(testingObject, state, "sigmas")
+			convey.So(sigmas, convey.ShouldResemble, []float32{1, 0.75, 0.5, 0.25})
+			convey.So(backend.request.Inputs["alpha"], convey.ShouldEqual, float32(-0.25))
+		})
+
+		convey.Convey("It should compute terminal delta for the final schedule entry", func() {
+			state.Set("step_index", int64(3))
+
+			err := executor.Run(context.Background(), program, graphs, map[string]any{"capture": "compute"})
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(backend.request.Inputs["alpha"], convey.ShouldEqual, float32(-0.25))
+		})
+	})
+}
+
 func BenchmarkExecutorRunRandomNormal(benchmark *testing.B) {
 	state, err := NewStateStore([]ast.StateDeclaration{
 		{

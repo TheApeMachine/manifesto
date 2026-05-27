@@ -1,0 +1,40 @@
+kind: Operation
+category: math
+op: math.batchnorm_denorm
+name: BatchNormDenorm
+label: BatchNorm Denorm
+description: "Applies stored BatchNorm statistics in reverse: y = x * sqrt(variance + eps) + mean."
+initial_width: 220
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor [N, C, ...]
+outputs:
+  - name: y
+    type: tensor
+    description: Denormalized output tensor
+config:
+  - name: channels
+    type: int
+  - name: mean
+    type: string
+  - name: variance
+    type: string
+bind:
+  method: BatchNormDenorm
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: config.mean.tensor.pointer
+    - ref: config.variance.tensor.pointer
+    - ref: output.y.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: config.channels.int
+    - ref: input.x.shape
+      drop_head: 2
+      product: true
+    - ref: input.x.dtype
