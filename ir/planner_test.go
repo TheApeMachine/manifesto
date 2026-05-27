@@ -275,6 +275,19 @@ func TestPlanWorkspaceUsesAlignmentDefault(t *testing.T) {
 	})
 }
 
+func TestPlanWorkspaceRejectsNonPowerOfTwoAlign(t *testing.T) {
+	convey.Convey("Given PlanWorkspaceOptions with Align=48", t, func() {
+		topology, _ := makeLinearTopology(2)
+
+		err := PlanWorkspace(topology, PlanWorkspaceOptions{Align: 48})
+
+		convey.Convey("PlanWorkspace returns an error", func() {
+			convey.So(err, convey.ShouldNotBeNil)
+			convey.So(err.Error(), convey.ShouldContainSubstring, "power of two")
+		})
+	})
+}
+
 func TestPortByteSizeScalar(t *testing.T) {
 	convey.Convey("Given a port with a 0-d (scalar) shape", t, func() {
 		port := &Port{
