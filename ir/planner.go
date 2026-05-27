@@ -17,7 +17,8 @@ not bound.
 Align is the minimum workspace base-pointer alignment in bytes.
 ARCHITECTURE.md §5.1 mandates 64 (AVX-512 cache line and the largest
 SIMD lane width across CPU and GPU targets). Each interval's offset
-and size is rounded up to this boundary.
+and size is rounded up to this boundary. Align must be a power of two;
+non-power-of-two values are rejected by PlanWorkspace.
 */
 type PlanWorkspaceOptions struct {
 	Bindings SymbolMap
@@ -46,6 +47,10 @@ func PlanWorkspace(topology *Topology, options PlanWorkspaceOptions) error {
 
 	if options.Align <= 0 {
 		options.Align = 64
+	}
+
+	if !isPowerOfTwo(options.Align) {
+		return fmt.Errorf("planner: Align=%d must be a power of two", options.Align)
 	}
 
 	if options.Bindings == nil {
@@ -405,9 +410,17 @@ func chooseLowestNonConflictingOffset(size int64, live []liveBlock, align int64)
 	}
 }
 
+func isPowerOfTwo(value int64) bool {
+	return value > 0 && (value&(value-1)) == 0
+}
+
 func alignUp(value, align int64) int64 {
 	if align <= 1 {
 		return value
+	}
+
+	if !isPowerOfTwo(align) {
+		panic(fmt.Sprintf("planner: alignUp requires power-of-two align, got %d", align))
 	}
 
 	return (value + align - 1) &^ (align - 1)

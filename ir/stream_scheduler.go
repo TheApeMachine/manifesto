@@ -122,13 +122,18 @@ func ScheduleStreams(topology *Topology, options StreamScheduleOptions) error {
 			// Attach the signal to the producer node.
 			producerNode := findNodeByID(topology.Nodes, predecessorNodeID)
 
-			if producerNode != nil {
-				producerNode.SyncBarriers = append(producerNode.SyncBarriers, SyncEvent{
-					EventID:  eventID,
-					StreamID: predecessorStream,
-					Wait:     false,
-				})
+			if producerNode == nil {
+				return fmt.Errorf(
+					"scheduler: node %q (id=%d) waits on stream %d producer id=%d, but no such node exists",
+					node.Name, node.ID, predecessorStream, predecessorNodeID,
+				)
 			}
+
+			producerNode.SyncBarriers = append(producerNode.SyncBarriers, SyncEvent{
+				EventID:  eventID,
+				StreamID: predecessorStream,
+				Wait:     false,
+			})
 		}
 	}
 
@@ -196,7 +201,11 @@ func collectPredecessorStreams(
 
 		// Keep the most-recent producer per stream so we know who to
 		// emit the signal on later.
-		streams[producer.StreamID] = producer.ID
+		existingID, exists := streams[producer.StreamID]
+
+		if !exists || producer.ID > existingID {
+			streams[producer.StreamID] = producer.ID
+		}
 	}
 
 	return streams

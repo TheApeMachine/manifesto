@@ -212,11 +212,9 @@ func TestScheduleStreamsSerialMaxStreams1(t *testing.T) {
 			}
 		})
 
-		convey.Convey("No cross-stream SyncBarriers are needed", func() {
+		convey.Convey("No SyncBarriers are emitted when MaxStreams forces serial execution", func() {
 			for _, node := range topology.Nodes {
-				for _, event := range node.SyncBarriers {
-					convey.So(event.StreamID, convey.ShouldEqual, int32(0))
-				}
+				convey.So(len(node.SyncBarriers), convey.ShouldEqual, 0)
 			}
 		})
 	})

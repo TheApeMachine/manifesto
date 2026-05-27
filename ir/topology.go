@@ -30,11 +30,12 @@ type Topology struct {
 	// the executor must allocate at session init. Zero-valued before
 	// the planner runs.
 	Workspace WorkspaceLayout
-	// InputPorts maps human-readable manifest input names to the
-	// workspace offset where the executor expects the host to place
-	// the input tensor before each dispatch.
+	// InputPorts maps manifest input name -> byte offset within Workspace
+	// (not Port.ID). The host copies input tensors to workspaceBase+offset
+	// before dispatch; no Workspace.Intervals lookup is required.
 	InputPorts map[string]int32
-	// OutputPorts maps manifest output names to the workspace offset
-	// the host reads at an execution boundary.
+	// OutputPorts maps manifest output name -> byte offset within Workspace
+	// (not Port.ID). The host reads tensors at workspaceBase+offset at an
+	// execution boundary.
 	OutputPorts map[string]int32
 }

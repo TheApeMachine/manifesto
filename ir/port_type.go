@@ -40,14 +40,45 @@ type ShapeSchema struct {
 }
 
 /*
-Dimension is a single axis in a shape. Exactly one of Symbol or Static
-is meaningful: when Symbol is non-empty, the dimension is dynamic and
-its value comes from the SymbolMap at runtime; when Symbol is empty,
-Static gives the fixed compile-time size.
+Dimension is a single axis in a shape. Symbol != "" is the canonical
+discriminator: a non-empty Symbol marks a dynamic dimension whose
+value comes from the SymbolMap at runtime. When Symbol is empty, Static
+is the fixed compile-time size. The zero value Dimension{} is a static
+dimension of size 0 (not symbolic). Call NewSymbolicDimension or
+NewStaticDimension to construct valid dimensions; use Validate to
+reject invalid combinations before unification.
 */
 type Dimension struct {
 	Symbol string
 	Static int64
+}
+
+/*
+NewSymbolicDimension returns a dynamic dimension bound to symbol at runtime.
+*/
+func NewSymbolicDimension(symbol string) Dimension {
+	return Dimension{Symbol: symbol}
+}
+
+/*
+NewStaticDimension returns a fixed compile-time dimension of size elements.
+*/
+func NewStaticDimension(size int64) Dimension {
+	return Dimension{Static: size}
+}
+
+/*
+Validate reports whether Symbol and Static are not both set in conflicting ways.
+*/
+func (dimension Dimension) Validate() error {
+	if dimension.Symbol != "" && dimension.Static != 0 {
+		return fmt.Errorf(
+			"dimension: symbol %q and static size %d cannot both be set",
+			dimension.Symbol, dimension.Static,
+		)
+	}
+
+	return nil
 }
 
 /*

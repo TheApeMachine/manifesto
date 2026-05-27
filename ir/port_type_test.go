@@ -7,6 +7,41 @@ import (
 	"github.com/theapemachine/manifesto/dtype"
 )
 
+func TestDimensionValidate(t *testing.T) {
+	convey.Convey("Given Dimension constructors and Validate", t, func() {
+		convey.Convey("NewSymbolicDimension validates and is symbolic", func() {
+			dimension := NewSymbolicDimension("B")
+
+			convey.So(dimension.Validate(), convey.ShouldBeNil)
+			convey.So(dimension.IsSymbolic(), convey.ShouldBeTrue)
+		})
+
+		convey.Convey("NewStaticDimension validates and is not symbolic", func() {
+			dimension := NewStaticDimension(128)
+
+			convey.So(dimension.Validate(), convey.ShouldBeNil)
+			convey.So(dimension.IsSymbolic(), convey.ShouldBeFalse)
+		})
+
+		convey.Convey("Zero value is static size 0", func() {
+			var dimension Dimension
+
+			convey.So(dimension.Validate(), convey.ShouldBeNil)
+			convey.So(dimension.IsSymbolic(), convey.ShouldBeFalse)
+			convey.So(dimension.String(), convey.ShouldEqual, "0")
+		})
+
+		convey.Convey("Both symbol and nonzero static fail Validate", func() {
+			dimension := Dimension{Symbol: "B", Static: 128}
+
+			err := dimension.Validate()
+
+			convey.So(err, convey.ShouldNotBeNil)
+			convey.So(err.Error(), convey.ShouldContainSubstring, "cannot both be set")
+		})
+	})
+}
+
 func TestDimensionIsSymbolicAndString(t *testing.T) {
 	convey.Convey("Given a Dimension", t, func() {
 		convey.Convey("Symbolic dimensions report IsSymbolic and render the symbol", func() {

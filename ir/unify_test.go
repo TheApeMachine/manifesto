@@ -278,6 +278,17 @@ func TestUnifyDivisibilityConstraintEnforced(t *testing.T) {
 			convey.So(err, convey.ShouldNotBeNil)
 			convey.So(err.Error(), convey.ShouldContainSubstring, "not divisible by 8")
 		})
+
+		convey.Convey("Divisor zero is rejected at validation", func() {
+			zeroDivisor := DivisibilityConstraint{DimensionIndex: -1, Divisor: 0}
+			producer := makeType(dtype.Float32, makeShape(4, 768), LayoutContiguous, SemanticGeneric, zeroDivisor)
+			consumer := makeType(dtype.Float32, makeShape(4, 768), LayoutContiguous, SemanticGeneric)
+
+			_, err := Unify(producer, consumer)
+
+			convey.So(err, convey.ShouldNotBeNil)
+			convey.So(err.Error(), convey.ShouldContainSubstring, "zero divisor")
+		})
 	})
 }
 
