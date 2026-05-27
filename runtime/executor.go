@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -939,10 +940,38 @@ func float32Vector(ctx context.Context, value any) ([]float32, error) {
 			return nil, err
 		}
 
+		if typed.Location() != tensor.Host {
+			return float32VectorFromRawTensor(typed)
+		}
+
 		return typed.Float32Native()
 	default:
 		return nil, fmt.Errorf("expected float32 vector, got %T", value)
 	}
+}
+
+func float32VectorFromRawTensor(value tensor.Tensor) ([]float32, error) {
+	dataType, rawBytes, err := value.RawBytes()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if dataType != dtype.Float32 {
+		return nil, fmt.Errorf("expected float32 tensor bytes, got %s", dataType)
+	}
+
+	if len(rawBytes)%4 != 0 {
+		return nil, fmt.Errorf("float32 tensor byte length %d is not divisible by 4", len(rawBytes))
+	}
+
+	values := make([]float32, len(rawBytes)/4)
+
+	for index := range values {
+		values[index] = math.Float32frombits(binary.LittleEndian.Uint32(rawBytes[index*4:]))
+	}
+
+	return values, nil
 }
 
 func setRuntimeValue(values map[string]any, ref string, value any) {

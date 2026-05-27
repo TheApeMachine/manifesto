@@ -5,6 +5,7 @@ import (
 
 	"github.com/smartystreets/goconvey/convey"
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/dtype"
 )
 
 func TestBuildPagedPlan(testingObject *testing.T) {
@@ -37,6 +38,24 @@ func TestBuildPagedPlan(testingObject *testing.T) {
 			convey.So(plan.WriteOffsets, convey.ShouldResemble, []int32{5})
 			convey.So(plan.PageTable, convey.ShouldResemble, []int32{0})
 			convey.So(plan.KVLength, convey.ShouldEqual, 6)
+		})
+	})
+}
+
+func TestScalarInt32ValueAcceptsRawDeviceTensor(testingObject *testing.T) {
+	convey.Convey("Given raw bytes from a device-resident int32 scalar", testingObject, func() {
+		deviceTensor := newRawDeviceTensor(
+			testingObject,
+			[]int{1},
+			dtype.Int32,
+			[]byte{5, 0, 0, 0},
+		)
+
+		convey.Convey("It should decode through RawBytes", func() {
+			value, err := scalarInt32Value(deviceTensor)
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(value, convey.ShouldEqual, int32(5))
 		})
 	})
 }

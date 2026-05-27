@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/theapemachine/manifesto/dtype"
@@ -137,6 +138,10 @@ func scalarInt32Value(value any) (int32, error) {
 
 		return int32(typed[0]), nil
 	case tensor.Tensor:
+		if typed.Location() != tensor.Host {
+			return int32ScalarFromRawTensor(typed)
+		}
+
 		values, err := typed.Int32Native()
 
 		if err != nil {
@@ -151,4 +156,22 @@ func scalarInt32Value(value any) (int32, error) {
 	default:
 		return 0, fmt.Errorf("unsupported scalar type %T", value)
 	}
+}
+
+func int32ScalarFromRawTensor(value tensor.Tensor) (int32, error) {
+	dataType, rawBytes, err := value.RawBytes()
+
+	if err != nil {
+		return 0, err
+	}
+
+	if dataType != dtype.Int32 {
+		return 0, fmt.Errorf("expected int32 tensor bytes, got %s", dataType)
+	}
+
+	if len(rawBytes) != 4 {
+		return 0, fmt.Errorf("expected scalar int32 tensor bytes, got %d bytes", len(rawBytes))
+	}
+
+	return int32(binary.LittleEndian.Uint32(rawBytes)), nil
 }

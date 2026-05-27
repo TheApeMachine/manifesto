@@ -365,6 +365,30 @@ func TestExecutorRunTopKSampleAcceptsTensorLogits(testingObject *testing.T) {
 	})
 }
 
+func TestFloat32VectorAcceptsRawDeviceTensor(testingObject *testing.T) {
+	convey.Convey("Given raw bytes from a device-resident float32 tensor", testingObject, func() {
+		rawBytes := make([]byte, 12)
+		values := []float32{0, 1, 2}
+
+		for index, value := range values {
+			bits := math.Float32bits(value)
+			rawBytes[index*4] = byte(bits)
+			rawBytes[index*4+1] = byte(bits >> 8)
+			rawBytes[index*4+2] = byte(bits >> 16)
+			rawBytes[index*4+3] = byte(bits >> 24)
+		}
+
+		deviceTensor := newRawDeviceTensor(testingObject, []int{3}, dtype.Float32, rawBytes)
+
+		convey.Convey("It should decode through RawBytes", func() {
+			decoded, err := float32Vector(context.Background(), deviceTensor)
+
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(decoded, convey.ShouldResemble, values)
+		})
+	})
+}
+
 func TestTopKWeightsUsesExp(testingObject *testing.T) {
 	convey.Convey("Given top-k candidates with large negative logit gaps", testingObject, func() {
 		candidates := []topKCandidate{
@@ -663,6 +687,53 @@ func (backend *graphOutputBackend) CallGraph(
 	_ = request
 
 	return GraphCallResult{Outputs: backend.outputs}, nil
+}
+
+type rawDeviceTensor struct {
+	tensor.Tensor
+	rawType  dtype.DType
+	rawBytes []byte
+}
+
+func newRawDeviceTensor(
+	testingObject *testing.T,
+	dimensions []int,
+	elementFormat dtype.DType,
+	rawBytes []byte,
+) *rawDeviceTensor {
+	testingObject.Helper()
+
+	shape, err := tensor.NewShape(dimensions)
+	if err != nil {
+		testingObject.Fatalf("newRawDeviceTensor: shape: %v", err)
+	}
+
+	resident, err := tensor.New(shape, elementFormat)
+	if err != nil {
+		testingObject.Fatalf("newRawDeviceTensor: tensor: %v", err)
+	}
+
+	return &rawDeviceTensor{
+		Tensor:   resident,
+		rawType:  elementFormat,
+		rawBytes: append([]byte(nil), rawBytes...),
+	}
+}
+
+func (resident *rawDeviceTensor) Location() tensor.Location {
+	return tensor.Metal
+}
+
+func (resident *rawDeviceTensor) RawBytes() (dtype.DType, []byte, error) {
+	return resident.rawType, append([]byte(nil), resident.rawBytes...), nil
+}
+
+func (resident *rawDeviceTensor) Float32Native() ([]float32, error) {
+	return nil, tensor.ErrDTypeMismatch
+}
+
+func (resident *rawDeviceTensor) Int32Native() ([]int32, error) {
+	return nil, tensor.ErrDTypeMismatch
 }
 
 type encodeCaptureHost struct {
