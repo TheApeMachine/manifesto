@@ -77,6 +77,84 @@ func TestTopologyForPlanning_SharesProducerConsumerPorts(test *testing.T) {
 	})
 }
 
+func TestTopologyForPlanning_AliasesReshapePorts(test *testing.T) {
+	convey.Convey("Given reshape nodes that return storage views", test, func() {
+		flat := float32Port(4, 8)
+		heads := float32Port(4, 2, 4)
+
+		aliasCases := []struct {
+			operation  string
+			inputType  ir.PortType
+			outputType ir.PortType
+		}{
+			{
+				operation:  "shape.view_as_heads",
+				inputType:  flat,
+				outputType: heads,
+			},
+			{
+				operation:  "shape.merge_heads",
+				inputType:  heads,
+				outputType: flat,
+			},
+		}
+
+		for _, aliasCase := range aliasCases {
+			convey.Convey(aliasCase.operation+" shares the producer port through its consumer", func() {
+				graph := &ast.Graph{
+					Inputs: []string{"x"},
+					Nodes: []*ast.GraphNode{
+						{
+							ID:         "produce",
+							Op:         "linear",
+							Inputs:     []string{"x"},
+							InputTypes: []ir.PortType{aliasCase.inputType},
+							OutputType: aliasCase.inputType,
+						},
+						{
+							ID:         "reshape",
+							Op:         aliasCase.operation,
+							Inputs:     []string{"produce"},
+							InputTypes: []ir.PortType{aliasCase.inputType},
+							OutputType: aliasCase.outputType,
+						},
+						{
+							ID:         "consume",
+							Op:         "rope",
+							Inputs:     []string{"reshape"},
+							InputTypes: []ir.PortType{aliasCase.outputType},
+							OutputType: aliasCase.outputType,
+						},
+					},
+				}
+
+				topology := TopologyForPlanning(graph)
+
+				producerOutput := topology.Nodes[0].Outputs[0]
+				reshapeInput := topology.Nodes[1].Inputs[0]
+				reshapeOutput := topology.Nodes[1].Outputs[0]
+				consumerInput := topology.Nodes[2].Inputs[0]
+
+				convey.So(reshapeInput, convey.ShouldEqual, producerOutput)
+				convey.So(reshapeOutput, convey.ShouldEqual, producerOutput)
+				convey.So(consumerInput, convey.ShouldEqual, producerOutput)
+
+				ir.AssignPortIDs(topology)
+
+				intervals, err := ir.AnalyzeLiveness(topology.Nodes, ir.SymbolMap{})
+
+				convey.So(err, convey.ShouldBeNil)
+
+				interval := planningIntervalForPort(intervals, producerOutput.ID)
+
+				convey.So(interval, convey.ShouldNotBeNil)
+				convey.So(interval.Start, convey.ShouldEqual, 0)
+				convey.So(interval.End, convey.ShouldEqual, 2)
+			})
+		}
+	})
+}
+
 func TestPlanGraph_ProducesNonOverlappingOffsets(test *testing.T) {
 	convey.Convey("Given a typed linear graph", test, func() {
 		hidden := float32Port(4, 4) // 64 bytes per tensor
@@ -242,4 +320,14 @@ func TestMergeSymbolMaps_PanicsOnConflict(test *testing.T) {
 			_ = mergeSymbolMaps(base, overlay)
 		}, convey.ShouldPanic)
 	})
+}
+
+func planningIntervalForPort(intervals []ir.Interval, portID int32) *ir.Interval {
+	for index := range intervals {
+		if intervals[index].PortID == portID {
+			return &intervals[index]
+		}
+	}
+
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/smartystreets/goconvey/convey"
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/ir/dag"
 )
 
 func TestLowerTopologyFlatChain(t *testing.T) {
@@ -134,6 +135,64 @@ func TestLowerTopologyExpandsRepeat(t *testing.T) {
 	})
 }
 
+func TestLowerTopologyRebindsOutputNames(t *testing.T) {
+	convey.Convey("Given a topology that writes a graph input value name", t, func() {
+		topology := &ast.Topology{
+			Inputs: []string{
+				"key_pages",
+				"values",
+				"page_ids",
+				"offsets",
+				"key_page_table",
+			},
+			Outputs: map[string]string{
+				"key_pages": "key_pages",
+			},
+			Nodes: []ast.Node{
+				{
+					ID:  "write",
+					Op:  "state.page_write",
+					In:  []string{"key_pages", "values", "page_ids", "offsets"},
+					Out: []string{"key_pages"},
+				},
+				{
+					ID:  "gather",
+					Op:  "state.page_gather",
+					In:  []string{"key_pages", "key_page_table"},
+					Out: []string{"key_visible"},
+				},
+				{
+					ID:  "attention",
+					Op:  "attention.gqa",
+					In:  []string{"key_visible"},
+					Out: []string{"attention_out"},
+				},
+			},
+		}
+
+		lowered, err := LowerTopology(topology)
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(lowered, convey.ShouldNotBeNil)
+
+		convey.Convey("Then downstream readers use the writer node", func() {
+			convey.So(lowered.AST.Nodes[1].Inputs[0], convey.ShouldEqual, "write")
+			convey.So(lowered.AST.Outputs["key_pages"], convey.ShouldEqual, "write")
+		})
+
+		convey.Convey("And execution layers preserve write before gather", func() {
+			layers, err := lowered.DAG.TopologyLayers()
+
+			convey.So(err, convey.ShouldBeNil)
+
+			indices := topologyLayerIndices(layers)
+
+			convey.So(indices["write"], convey.ShouldBeLessThan, indices["gather"])
+			convey.So(indices["gather"], convey.ShouldBeLessThan, indices["attention"])
+		})
+	})
+}
+
 func TestLowerTopologyRejectsUnknownInput(t *testing.T) {
 	convey.Convey("Given a topology that references an unknown input", t, func() {
 		topology := &ast.Topology{
@@ -169,6 +228,18 @@ func TestParseHFReference(t *testing.T) {
 		_, _, ok = ParseHFReference("model/diffusion/flux.yml")
 		convey.So(ok, convey.ShouldBeFalse)
 	})
+}
+
+func topologyLayerIndices(layers [][]*dag.Node) map[string]int {
+	indices := make(map[string]int)
+
+	for layerIndex, layer := range layers {
+		for _, node := range layer {
+			indices[node.ID()] = layerIndex
+		}
+	}
+
+	return indices
 }
 
 func TestCompileAssetsWithoutResolverFails(t *testing.T) {

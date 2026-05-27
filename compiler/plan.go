@@ -107,9 +107,7 @@ func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
 		// node.ID. The typer's OutputType is the unified producer type
 		// after all downstream consumers have had a chance to constrain
 		// it; that's the PortType the planner uses to size this output.
-		outputPort := &ir.Port{
-			Type: node.OutputType,
-		}
+		outputPort := planningOutputPort(node, irNode)
 
 		irNode.Outputs = []*ir.Port{outputPort}
 		producerOutputs[node.ID] = outputPort
@@ -118,6 +116,25 @@ func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
 	}
 
 	return topology
+}
+
+func planningOutputPort(node *ast.GraphNode, irNode *ir.Node) *ir.Port {
+	if planningAliasOp(node.Op) && len(irNode.Inputs) > 0 && irNode.Inputs[0] != nil {
+		return irNode.Inputs[0]
+	}
+
+	return &ir.Port{
+		Type: node.OutputType,
+	}
+}
+
+func planningAliasOp(op string) bool {
+	switch op {
+	case "shape.view_as_heads", "shape.merge_heads":
+		return true
+	default:
+		return false
+	}
 }
 
 /*
