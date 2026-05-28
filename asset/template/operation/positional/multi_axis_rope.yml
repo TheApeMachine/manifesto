@@ -3,7 +3,7 @@ category: positional
 op: positional.multi_axis_rope
 name: MultiAxisRoPE
 label: Multi-Axis Rotary Embeddings
-description: Applies FLUX-style four-axis rotary position embeddings over interleaved head pairs.
+description: Applies config-driven multi-axis rotary position embeddings over interleaved head pairs.
 initial_width: 220
 inputs:
   - name: x
@@ -27,6 +27,21 @@ config:
   - name: latent_side
     type: int
     description: Width and height of the latent token grid
+  - name: axis_count
+    type: int
+    description: Number of RoPE coordinate axes
+  - name: axis_dim_0
+    type: int
+    description: RoPE dimension count for axis 0
+  - name: axis_dim_1
+    type: int
+    description: RoPE dimension count for axis 1
+  - name: axis_dim_2
+    type: int
+    description: RoPE dimension count for axis 2
+  - name: axis_dim_3
+    type: int
+    description: RoPE dimension count for axis 3
   - name: mode
     type: string
     default: interleaved
@@ -41,6 +56,16 @@ bind:
       ref: config.latent_seq_len.int
     LatentSide:
       ref: config.latent_side.int
+    AxisCount:
+      ref: config.axis_count.int
+    AxisDim0:
+      ref: config.axis_dim_0.int
+    AxisDim1:
+      ref: config.axis_dim_1.int
+    AxisDim2:
+      ref: config.axis_dim_2.int
+    AxisDim3:
+      ref: config.axis_dim_3.int
   output:
     shape:
       - ref: input.x.shape

@@ -40,6 +40,11 @@ architectures:
           - { config: mlp_ratio }
           - { literal: 2 }
       rope_theta: { config: rope_theta }
+      rope_axis_count: { config: rope_axis_count }
+      rope_axis_dim_0: { config: rope_axis_dim_0 }
+      rope_axis_dim_1: { config: rope_axis_dim_1 }
+      rope_axis_dim_2: { config: rope_axis_dim_2 }
+      rope_axis_dim_3: { config: rope_axis_dim_3 }
       eps: { config: eps }
       context_seq_len: { config: context_seq_len }
       latent_seq_len: { config: latent_seq_len }

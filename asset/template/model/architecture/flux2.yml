@@ -20,6 +20,11 @@
 #   mlp_inner               SwiGLU inner dim (3*hidden_size for mlp_ratio=3)
 #   mlp_packed              SwiGLU packed gate+up dim (2*mlp_inner)
 #   rope_theta              RoPE base (e.g. 2000)
+#   rope_axis_count         axis count from HF axes_dims_rope
+#   rope_axis_dim_0         first RoPE axis dimension from HF config
+#   rope_axis_dim_1         second RoPE axis dimension from HF config
+#   rope_axis_dim_2         third RoPE axis dimension from HF config
+#   rope_axis_dim_3         fourth RoPE axis dimension from HF config
 #   eps                     RMSNorm eps (e.g. 1e-06)
 #   context_seq_len         text token count (e.g. 1024)
 #   latent_seq_len          latent token count after concat trim (e.g. 4096)
@@ -27,7 +32,7 @@
 #   dual_terminal_index     `${num_layers}` as a literal — used to wire the
 #                           handoff between dual and single stream sections
 #   joint_terminal_index    `${num_layers} + ${num_single_layers}` as a literal
-inputs: [hidden_states, encoder_hidden_states, timestep, guidance]
+inputs: [hidden_states, encoder_hidden_states, timestep{{ if .GuidanceEmbeds }}, guidance{{ end }}]
 nodes:
   - id: time_guidance_embed.time_proj
     op: embedding.timestep
@@ -56,11 +61,12 @@ nodes:
   - id: time_guidance_embed.timestep_embedder.linear_2
     op: projection.linear
     in: [timestep_activated]
-    out: [timestep_embedding]
+    out: [{{ if .GuidanceEmbeds }}timestep_embedding{{ else }}temb{{ end }}]
     config:
       in_features: ${include.hidden_size}
       out_features: ${include.hidden_size}
 
+{{ if .GuidanceEmbeds }}
   - id: time_guidance_embed.guidance_proj
     op: embedding.timestep
     in: [guidance]
@@ -97,6 +103,7 @@ nodes:
     op: math.add
     in: [timestep_embedding, guidance_embedding]
     out: [temb]
+{{ end }}
 
   - id: single_stream_modulation.act
     op: activation.swish
@@ -291,6 +298,11 @@ nodes:
           head_dim: ${include.attention_head_dim}
           latent_seq_len: ${include.latent_seq_len}
           latent_side: ${include.latent_side}
+          axis_count: ${include.rope_axis_count}
+          axis_dim_0: ${include.rope_axis_dim_0}
+          axis_dim_1: ${include.rope_axis_dim_1}
+          axis_dim_2: ${include.rope_axis_dim_2}
+          axis_dim_3: ${include.rope_axis_dim_3}
           mode: half
 
       - id: "tb_rope_k_${i}"
@@ -302,6 +314,11 @@ nodes:
           head_dim: ${include.attention_head_dim}
           latent_seq_len: ${include.latent_seq_len}
           latent_side: ${include.latent_side}
+          axis_count: ${include.rope_axis_count}
+          axis_dim_0: ${include.rope_axis_dim_0}
+          axis_dim_1: ${include.rope_axis_dim_1}
+          axis_dim_2: ${include.rope_axis_dim_2}
+          axis_dim_3: ${include.rope_axis_dim_3}
           mode: half
 
       - id: "transformer_blocks.${i}.attn"
@@ -507,6 +524,11 @@ nodes:
           head_dim: ${include.attention_head_dim}
           latent_seq_len: ${include.latent_seq_len}
           latent_side: ${include.latent_side}
+          axis_count: ${include.rope_axis_count}
+          axis_dim_0: ${include.rope_axis_dim_0}
+          axis_dim_1: ${include.rope_axis_dim_1}
+          axis_dim_2: ${include.rope_axis_dim_2}
+          axis_dim_3: ${include.rope_axis_dim_3}
           mode: half
 
       - id: "st_rope_k_${i}"
@@ -518,6 +540,11 @@ nodes:
           head_dim: ${include.attention_head_dim}
           latent_seq_len: ${include.latent_seq_len}
           latent_side: ${include.latent_side}
+          axis_count: ${include.rope_axis_count}
+          axis_dim_0: ${include.rope_axis_dim_0}
+          axis_dim_1: ${include.rope_axis_dim_1}
+          axis_dim_2: ${include.rope_axis_dim_2}
+          axis_dim_3: ${include.rope_axis_dim_3}
           mode: half
 
       - id: "single_transformer_blocks.${i}.attn"
