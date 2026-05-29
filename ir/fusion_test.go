@@ -5,14 +5,15 @@ import (
 
 	"github.com/smartystreets/goconvey/convey"
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/types"
 )
 
-func makeOpNode(name string, op Operation, inputs, outputs []*Port) *Node {
+func makeOpNode(name string, op types.Op, inputs, outputs []*Port) *Node {
 	return &Node{
-		Name:      name,
-		Inputs:    inputs,
-		Outputs:   outputs,
-		Operation: op,
+		Name:    name,
+		Op:      op,
+		Inputs:  inputs,
+		Outputs: outputs,
 	}
 }
 
@@ -41,34 +42,34 @@ func TestFusionNodeTypeStringEnumerates(t *testing.T) {
 func TestIsFusibleElementwiseRecognizesKnownOps(t *testing.T) {
 	convey.Convey("Given the fusion-op registry", t, func() {
 		convey.Convey("Known elementwise ops are fusible", func() {
-			convey.So(IsFusibleElementwise(OperationAdd), convey.ShouldBeTrue)
-			convey.So(IsFusibleElementwise(OperationMul), convey.ShouldBeTrue)
-			convey.So(IsFusibleElementwise(OperationReLU), convey.ShouldBeTrue)
-			convey.So(IsFusibleElementwise(OperationSigmoid), convey.ShouldBeTrue)
+			convey.So(IsFusibleElementwise("math.add"), convey.ShouldBeTrue)
+			convey.So(IsFusibleElementwise("math.mul"), convey.ShouldBeTrue)
+			convey.So(IsFusibleElementwise("activation.relu"), convey.ShouldBeTrue)
+			convey.So(IsFusibleElementwise("activation.sigmoid"), convey.ShouldBeTrue)
 		})
 
 		convey.Convey("Non-elementwise ops are not fusible", func() {
-			convey.So(IsFusibleElementwise(OperationMatmul), convey.ShouldBeFalse)
-			convey.So(IsFusibleElementwise(OperationScaledDotProductAttention), convey.ShouldBeFalse)
-			convey.So(IsFusibleElementwise(OperationLayerNorm), convey.ShouldBeFalse)
+			convey.So(IsFusibleElementwise("projection.linear"), convey.ShouldBeFalse)
+			convey.So(IsFusibleElementwise("attention.sdpa"), convey.ShouldBeFalse)
+			convey.So(IsFusibleElementwise("math.layernorm"), convey.ShouldBeFalse)
 		})
 
-		convey.Convey("Zero/uninitialized Operation is not fusible", func() {
-			convey.So(IsFusibleElementwise(Operation(0)), convey.ShouldBeFalse)
+		convey.Convey("Empty op is not fusible", func() {
+			convey.So(IsFusibleElementwise(""), convey.ShouldBeFalse)
 		})
 	})
 }
 
 func TestFusionNodeTypeForOpReturnsMapping(t *testing.T) {
 	convey.Convey("Given FusionNodeTypeForOp", t, func() {
-		convey.Convey("OperationAdd → NodeAdd", func() {
-			nodeType, ok := FusionNodeTypeForOp(OperationAdd)
+		convey.Convey("math.add → NodeAdd", func() {
+			nodeType, ok := FusionNodeTypeForOp("math.add")
 			convey.So(ok, convey.ShouldBeTrue)
 			convey.So(nodeType, convey.ShouldEqual, NodeAdd)
 		})
 
 		convey.Convey("Non-fusible op → (NodeInput, false)", func() {
-			nodeType, ok := FusionNodeTypeForOp(OperationScaledDotProductAttention)
+			nodeType, ok := FusionNodeTypeForOp("attention.sdpa")
 			convey.So(ok, convey.ShouldBeFalse)
 			convey.So(nodeType, convey.ShouldEqual, NodeInput)
 		})
@@ -83,8 +84,8 @@ func TestFindFusionClustersSingleNode(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("matmul", OperationMatmul, []*Port{input}, []*Port{intermediate}),
-				makeOpNode("relu", OperationReLU, []*Port{intermediate}, []*Port{output}),
+				makeOpNode("matmul", "projection.linear", []*Port{input}, []*Port{intermediate}),
+				makeOpNode("relu", "activation.relu", []*Port{intermediate}, []*Port{output}),
 			},
 		}
 
@@ -118,9 +119,9 @@ func TestFindFusionClustersChain(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("add", OperationAdd, []*Port{left, right}, []*Port{afterAdd}),
-				makeOpNode("mul", OperationMul, []*Port{afterAdd, scale}, []*Port{afterMul}),
-				makeOpNode("relu", OperationReLU, []*Port{afterMul}, []*Port{afterReLU}),
+				makeOpNode("add", "math.add", []*Port{left, right}, []*Port{afterAdd}),
+				makeOpNode("mul", "math.mul", []*Port{afterAdd, scale}, []*Port{afterMul}),
+				makeOpNode("relu", "activation.relu", []*Port{afterMul}, []*Port{afterReLU}),
 			},
 		}
 
@@ -171,9 +172,9 @@ func TestFindFusionClustersNonElementwiseBreaksChain(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("add", OperationAdd, []*Port{left, right}, []*Port{afterAdd}),
-				makeOpNode("matmul", OperationMatmul, []*Port{afterAdd, weight}, []*Port{afterMatmul}),
-				makeOpNode("relu", OperationReLU, []*Port{afterMatmul}, []*Port{afterReLU}),
+				makeOpNode("add", "math.add", []*Port{left, right}, []*Port{afterAdd}),
+				makeOpNode("matmul", "projection.linear", []*Port{afterAdd, weight}, []*Port{afterMatmul}),
+				makeOpNode("relu", "activation.relu", []*Port{afterMatmul}, []*Port{afterReLU}),
 			},
 		}
 
@@ -202,9 +203,9 @@ func TestFindFusionClustersFanOutBreaksAbsorption(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("add", OperationAdd, []*Port{left, right}, []*Port{afterAdd}),
-				makeOpNode("mul1", OperationMul, []*Port{afterAdd, scale1}, []*Port{out1}),
-				makeOpNode("mul2", OperationMul, []*Port{afterAdd, scale2}, []*Port{out2}),
+				makeOpNode("add", "math.add", []*Port{left, right}, []*Port{afterAdd}),
+				makeOpNode("mul1", "math.mul", []*Port{afterAdd, scale1}, []*Port{out1}),
+				makeOpNode("mul2", "math.mul", []*Port{afterAdd, scale2}, []*Port{out2}),
 			},
 		}
 
@@ -246,7 +247,7 @@ func TestFusionASTSymbolicCountExpr(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("relu", OperationReLU, []*Port{input}, []*Port{output}),
+				makeOpNode("relu", "activation.relu", []*Port{input}, []*Port{output}),
 			},
 		}
 
@@ -266,7 +267,7 @@ func TestFusionASTSymbolicCountExpr(t *testing.T) {
 
 		topology := &Topology{
 			Nodes: []*Node{
-				makeOpNode("relu", OperationReLU, []*Port{input}, []*Port{output}),
+				makeOpNode("relu", "activation.relu", []*Port{input}, []*Port{output}),
 			},
 		}
 

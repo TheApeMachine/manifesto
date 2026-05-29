@@ -1,151 +1,224 @@
 package compiler
 
 import (
+	"context"
 	"fmt"
-	"sort"
+	"strings"
 
+	"github.com/theapemachine/errnie"
+	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/types"
 )
 
 /*
-Compiler builds manifest IR from checkpoint tokens produced by a Parser.
+Compiler builds manifest IR from a topology recipe and a parser's tokens.
 */
 type Compiler struct {
-	parser          types.Parser
-	operationLookup *OperationLookup
+	ctx      context.Context
+	cancel   context.CancelFunc
+	pool     *Pool
+	parser   types.Parser
+	topology *ast.Topology
+	registry *types.OperationRegistry
+	project  *ir.Project
 }
 
 /*
 NewCompiler constructs a Compiler over one archive parser.
 */
-func NewCompiler(parser types.Parser) (*Compiler, error) {
-	if parser == nil {
-		return nil, fmt.Errorf("compiler: parser is required")
+func NewCompiler(ctx context.Context, pool *Pool, parser types.Parser) (*Compiler, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	registry, err := types.NewOperationRegistry()
+
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("compiler: %w", err)
 	}
 
-	return &Compiler{
-		parser:          parser,
-		operationLookup: NewOperationLookup(),
-	}, nil
+	compiler := &Compiler{
+		ctx:      ctx,
+		cancel:   cancel,
+		pool:     pool,
+		parser:   parser,
+		registry: registry,
+	}
+
+	return compiler, errnie.Require(map[string]any{
+		"ctx":      compiler.ctx,
+		"cancel":   compiler.cancel,
+		"parser":   compiler.parser,
+		"registry": compiler.registry,
+	})
 }
 
 /*
-Compile builds Project → Architecture → Topology → Node from parser tokens.
+WithTopology attaches the expanded or raw topology recipe the compiler
+materializes into ir.Topology nodes.
 */
-func (compiler *Compiler) Compile() (*ir.Project, error) {
-	tokenIndex, err := ir.NewTokenIndex(compiler.parser)
-
-	if err != nil {
-		return nil, fmt.Errorf("compiler: index tokens: %w", err)
+func (compiler *Compiler) WithTopology(topology *ast.Topology) *Compiler {
+	if compiler == nil {
+		return nil
 	}
 
-	project, err := compiler.buildProject(tokenIndex)
+	compiler.topology = topology
 
-	if err != nil {
-		return nil, fmt.Errorf("compiler: build project: %w", err)
-	}
-
-	return project, nil
+	return compiler
 }
 
 /*
-buildProject constructs Project → Architecture → Topology → Node from a token index.
+Build materializes Project → Architecture → Topology → Node from the
+attached topology recipe and checkpoint tokens yielded by the parser.
 */
-func (compiler *Compiler) buildProject(tokenIndex *ir.TokenIndex) (*ir.Project, error) {
-	if tokenIndex == nil {
-		return nil, fmt.Errorf("build project: token index is required")
+func (compiler *Compiler) Build() (*ir.Project, error) {
+	if compiler.topology == nil {
+		return nil, fmt.Errorf("compiler: topology is required")
 	}
 
-	nodeDrafts, err := compiler.indexNodeDrafts(tokenIndex)
+	compiler.project = &ir.Project{
+		Kind:     ir.KindResearchProject,
+		Metadata: make(map[string]string),
+		Architecture: &ir.Architecture{
+			Kind: ir.KindArchitecture,
+			Topology: &ir.Topology{
+				Kind: ir.KindTopology,
+			},
+		},
+	}
+
+	tokenIndex, err := compiler.indexTokens()
 
 	if err != nil {
 		return nil, err
 	}
 
-	nodes := make([]*ir.Node, 0, len(nodeDrafts))
-	nodeNames := make([]string, 0, len(nodeDrafts))
+	expanded, err := expandTopology(compiler.topology)
 
-	for nodeName := range nodeDrafts {
-		nodeNames = append(nodeNames, nodeName)
+	if err != nil {
+		return nil, fmt.Errorf("compiler: expand topology: %w", err)
 	}
 
-	sort.Strings(nodeNames)
+	for _, topologyNode := range expanded.Nodes {
+		node, err := compiler.buildNode(topologyNode, tokenIndex)
 
-	for _, nodeName := range nodeNames {
-		node, buildErr := nodeDrafts[nodeName].Node(compiler.operationLookup)
-
-		if buildErr != nil {
-			return nil, buildErr
+		if err != nil {
+			return nil, err
 		}
 
-		nodes = append(nodes, node)
+		compiler.project.Architecture.Topology.Nodes = append(
+			compiler.project.Architecture.Topology.Nodes,
+			node,
+		)
 	}
 
-	projectName, architectureName := compiler.projectNames(tokenIndex)
-
-	return &ir.Project{
-		Kind:        ir.KindResearchProject,
-		Name:        projectName,
-		Description: "compiled from checkpoint tokens",
-		Architecture: &ir.Architecture{
-			Kind:        ir.KindArchitecture,
-			Name:        architectureName,
-			Description: "compiled from checkpoint tokens",
-			Topology: &ir.Topology{
-				Kind:        ir.KindTopology,
-				Name:        "topology",
-				Description: "compiled from checkpoint tokens",
-				Nodes:       nodes,
-			},
-		},
-	}, nil
+	return compiler.project, nil
 }
 
-/*
-projectNames reads project and architecture names from checkpoint metadata.
-*/
-func (compiler *Compiler) projectNames(tokenIndex *ir.TokenIndex) (projectName string, architectureName string) {
-	projectName = "checkpoint"
-	architectureName = "model"
+func (compiler *Compiler) indexTokens() (map[string]types.Token, error) {
+	tokenIndex := make(map[string]types.Token)
 
-	if metadata, ok := tokenIndex.Metadata("model_type"); ok && metadata.Value != "" {
-		architectureName = metadata.Value
+	for token := range compiler.parser.Generate() {
+		switch token.Kind {
+		case types.KindMetadata:
+			compiler.project.Metadata[token.Name] = token.Value
+		case types.KindTensor:
+			tokenIndex[token.Name] = token
+		default:
+			return nil, fmt.Errorf("compiler: unknown token kind: %d", token.Kind)
+		}
 	}
 
-	if metadata, ok := tokenIndex.Metadata("format"); ok && metadata.Value != "" {
-		projectName = metadata.Value
-	}
-
-	return projectName, architectureName
+	return tokenIndex, nil
 }
 
-/*
-indexNodeDrafts groups checkpoint tensor tokens by node prefix.
-*/
-func (compiler *Compiler) indexNodeDrafts(tokenIndex *ir.TokenIndex) (map[string]*NodeDraft, error) {
-	nodeDrafts := make(map[string]*NodeDraft)
+func (compiler *Compiler) buildNode(
+	topologyNode ast.Node,
+	tokenIndex map[string]types.Token,
+) (*ir.Node, error) {
+	op := types.Op(strings.TrimSpace(topologyNode.Op))
 
-	for tensorName, token := range tokenIndex.Tensors() {
-		nodeName, paramSuffix, ok := compiler.operationLookup.SplitNodeParam(tensorName)
-
-		if !ok {
-			continue
-		}
-
-		nodeDraft, exists := nodeDrafts[nodeName]
-
-		if !exists {
-			nodeDraft = NewNodeDraft(nodeName, len(token.Shape))
-			nodeDrafts[nodeName] = nodeDraft
-		}
-
-		nodeDraft.AbsorbParam(tensorName, token, paramSuffix)
+	if op == "" {
+		return nil, fmt.Errorf("compiler: node %q: op is required", topologyNode.ID)
 	}
 
-	if len(nodeDrafts) == 0 {
-		return nil, fmt.Errorf("build project: no checkpoint tensors mapped to nodes")
+	bindMethod, err := op.BindMethod(compiler.registry)
+
+	if err != nil {
+		return nil, fmt.Errorf("compiler: node %q: %w", topologyNode.ID, err)
 	}
 
-	return nodeDrafts, nil
+	node := &ir.Node{
+		Kind:       ir.KindNode,
+		Name:       topologyNode.ID,
+		Op:         op,
+		BindMethod: bindMethod,
+	}
+
+	weightSpec, err := weightSpecForNode(topologyNode)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if weightSpec == nil {
+		return node, nil
+	}
+
+	weight, err := compiler.attachWeight(topologyNode.ID, weightSpec, tokenIndex)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if weight != nil {
+		node.Weight = weight
+	}
+
+	return node, nil
+}
+
+func (compiler *Compiler) attachWeight(
+	nodeID string,
+	weightSpec *ast.WeightSpec,
+	tokenIndex map[string]types.Token,
+) (*ir.Weight, error) {
+	tensorName := weightSpec.Weight
+
+	if tensorName == "" {
+		tensorName = nodeID + ".weight"
+	}
+
+	weightToken, ok := tokenIndex[tensorName]
+
+	if !ok {
+		return nil, fmt.Errorf("compiler: node %q: missing checkpoint tensor %q", nodeID, tensorName)
+	}
+
+	weight := &ir.Weight{
+		TensorName: tensorName,
+		Tensor:     weightToken,
+	}
+
+	if weightSpec.Bias != "" {
+		biasToken, biasOK := tokenIndex[weightSpec.Bias]
+
+		if !biasOK {
+			return nil, fmt.Errorf("compiler: node %q: missing bias tensor %q", nodeID, weightSpec.Bias)
+		}
+
+		weight.BiasName = weightSpec.Bias
+		weight.Bias = biasToken
+
+		return weight, nil
+	}
+
+	biasName := strings.TrimSuffix(tensorName, ".weight") + ".bias"
+
+	if biasToken, biasOK := tokenIndex[biasName]; biasOK {
+		weight.BiasName = biasName
+		weight.Bias = biasToken
+	}
+
+	return weight, nil
 }

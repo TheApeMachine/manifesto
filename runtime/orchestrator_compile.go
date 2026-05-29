@@ -24,6 +24,7 @@ func CompileProgramFromAsset(
 	}
 
 	manifestCompiler, err := compiler.NewProgramCompiler(
+		ctx,
 		compiler.NewPool(catalog.NewFS(asset.TemplateFS())),
 	)
 

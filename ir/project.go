@@ -11,6 +11,7 @@ type Project struct {
 	Description  string
 	Created      *time.Time
 	Updated      *time.Time
+	Metadata     map[string]string
 	Architecture *Architecture
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/types"
 )
 
 /*
@@ -15,9 +16,9 @@ on GPU; HLO ops on XLA).
 The enum is intentionally narrow: only operations the JIT codegen can
 emit as a single vector instruction (or a short polynomial sequence
 for transcendentals) qualify. Adding a new fusible operation requires:
-  1. Adding a NodeType constant here.
-  2. Adding the matching op-name mapping to fusibleOps.
-  3. Teaching every codegen backend to emit the operation.
+ 1. Adding a NodeType constant here.
+ 2. Adding the matching op-name mapping to fusibleOps.
+ 3. Teaching every codegen backend to emit the operation.
 */
 type FusionNodeType int
 
@@ -131,57 +132,53 @@ type FusionAST struct {
 }
 
 /*
-fusibleOps maps device.Backend Operation enum values to the
-FusionNodeType the clustering pass should emit when it encounters that
-op. Operations not present in this map are treated as fusion boundaries
-— the cluster ends at them.
+fusibleOps maps manifest operation identifiers to the FusionNodeType the
+clustering pass should emit when it encounters that op. Operations not
+present in this map are treated as fusion boundaries — the cluster ends
+at them.
 
 Only operations whose math fits one of the FusionNodeType constants
 appear here. Activations like SwiGLU or HardGelu are technically
 elementwise but require multiple-output or polynomial expansion that
 the current codegen path does not yet emit; adding them is a follow-up.
 */
-var fusibleOps = map[Operation]FusionNodeType{
-	// Binary elementwise.
-	OperationAdd: NodeAdd,
-	OperationSub: NodeSub,
-	OperationMul: NodeMul,
-	OperationDiv: NodeDiv,
+var fusibleOps = map[types.Op]FusionNodeType{
+	"math.add": NodeAdd,
+	"math.sub": NodeSub,
+	"math.mul": NodeMul,
+	"math.div": NodeDiv,
 
-	// Unary elementwise math.
-	OperationNeg:  NodeNeg,
-	OperationAbs:  NodeAbs,
-	OperationSqrt: NodeSqrt,
+	"math.neg":  NodeNeg,
+	"math.abs":  NodeAbs,
+	"math.sqrt": NodeSqrt,
 
-	// Transcendentals fused as polynomial approximations by codegen.
-	OperationExp: NodeExp,
-	OperationLog: NodeLog,
+	"math.exp": NodeExp,
+	"math.log": NodeLog,
 
-	// Activations whose math is a single-output elementwise transform.
-	OperationReLU:    NodeReLU,
-	OperationSigmoid: NodeSigmoid,
-	OperationTanh:    NodeTanh,
+	"activation.relu":    NodeReLU,
+	"activation.sigmoid": NodeSigmoid,
+	"activation.tanh":    NodeTanh,
 }
 
 /*
-IsFusibleElementwise reports whether an Operation participates in
+IsFusibleElementwise reports whether a manifest op participates in
 elementwise fusion clusters. Used by FindFusionClusters and exposed
 publicly so other compiler passes (cost models, manual fusion hints)
 can ask the same question.
 */
-func IsFusibleElementwise(op Operation) bool {
+func IsFusibleElementwise(op types.Op) bool {
 	_, fusible := fusibleOps[op]
 	return fusible
 }
 
 /*
-FusionNodeTypeForOp returns the FusionNodeType corresponding to an
-Operation, or (NodeInput, false) if the op is not fusible. NodeInput
+FusionNodeTypeForOp returns the FusionNodeType corresponding to a
+manifest op, or (NodeInput, false) if the op is not fusible. NodeInput
 is the zero sentinel because it never appears as the result of an op
 lookup — input nodes are leaves the clustering pass constructs
 directly.
 */
-func FusionNodeTypeForOp(op Operation) (FusionNodeType, bool) {
+func FusionNodeTypeForOp(op types.Op) (FusionNodeType, bool) {
 	nodeType, fusible := fusibleOps[op]
 	return nodeType, fusible
 }
@@ -238,7 +235,7 @@ func FindFusionClusters(topology *Topology) []FusionAST {
 			continue
 		}
 
-		if !IsFusibleElementwise(node.Operation) {
+		if !IsFusibleElementwise(node.Op) {
 			continue
 		}
 
@@ -368,7 +365,7 @@ func buildClusterNode(
 		return nil
 	}
 
-	nodeType, fusible := FusionNodeTypeForOp(node.Operation)
+	nodeType, fusible := FusionNodeTypeForOp(node.Op)
 	if !fusible {
 		return nil
 	}
@@ -427,7 +424,7 @@ func childForInput(
 	if hasProducer && !visited[producerIndex] {
 		producerNode := topology.Nodes[producerIndex]
 
-		if producerNode != nil && IsFusibleElementwise(producerNode.Operation) {
+		if producerNode != nil && IsFusibleElementwise(producerNode.Op) {
 			if consumerCount[inputPort] == 1 {
 				subtree := buildClusterNode(
 					producerIndex,

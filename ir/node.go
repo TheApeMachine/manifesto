@@ -3,19 +3,21 @@ package ir
 import (
 	"time"
 	"unsafe"
+
+	"github.com/theapemachine/manifesto/types"
 )
 
 /*
 Node is one operation in the topology.
 
-The Kind/Name/Operation/Weight/Inputs/Outputs/timestamp fields are the
-original recipe-compiler representation. The ID/JitKernel/StreamID/
-SyncBarriers fields are the planner-output additions per
-ARCHITECTURE.md §6. The planner-output fields stay zero/nil until the
-fusion + codegen + scheduler passes populate them.
+Op is the manifest operation identifier from the topology recipe
+(e.g. "activation.gelu", "projection.linear"). It matches the op:
+field in template/operation/*.yml and drives bind.method resolution
+through types.OperationRegistry.
 
-Existing callers that read only the original fields continue to
-compile and work unchanged.
+The ID/JitKernel/StreamID/SyncBarriers fields are the planner-output
+additions per ARCHITECTURE.md §6. They stay zero/nil until the fusion
++ codegen + scheduler passes populate them.
 */
 type Node struct {
 	Kind        Kind
@@ -23,7 +25,8 @@ type Node struct {
 	Description string
 	Created     *time.Time
 	Updated     *time.Time
-	Operation   Operation
+	Op          types.Op
+	BindMethod  string
 	Weight      *Weight
 	Inputs      []*Port
 	Outputs     []*Port

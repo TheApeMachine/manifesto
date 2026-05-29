@@ -93,11 +93,7 @@ func (binder *Binder) Bind(
 }
 
 func (binder *Binder) tensorIndex(parser types.Parser) (map[string]types.Token, error) {
-	sequence, err := parser.Generate()
-
-	if err != nil {
-		return nil, fmt.Errorf("weights bind: parse archive: %w", err)
-	}
+	sequence := parser.Generate()
 
 	index := make(map[string]types.Token)
 

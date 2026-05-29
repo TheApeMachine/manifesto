@@ -65,14 +65,14 @@ type archiveParser struct {
 	archive []byte
 }
 
-func (archiveParser *archiveParser) Generate() (iter.Seq[types.Token], error) {
+func (archiveParser *archiveParser) Generate() iter.Seq[types.Token] {
 	headerLength := binary.LittleEndian.Uint64(archiveParser.archive[:8])
 	headerBytes := archiveParser.archive[8 : 8+headerLength]
 
 	fields := make(map[string]json.RawMessage)
 
 	if err := json.Unmarshal(headerBytes, &fields); err != nil {
-		return nil, err
+		return func(yield func(types.Token) bool) {}
 	}
 
 	tokens := make([]types.Token, 0, len(fields))
@@ -82,7 +82,7 @@ func (archiveParser *archiveParser) Generate() (iter.Seq[types.Token], error) {
 			var metadata map[string]string
 
 			if err := json.Unmarshal(rawField, &metadata); err != nil {
-				return nil, err
+				return func(yield func(types.Token) bool) {}
 			}
 
 			for key, value := range metadata {
@@ -103,13 +103,13 @@ func (archiveParser *archiveParser) Generate() (iter.Seq[types.Token], error) {
 		}
 
 		if err := json.Unmarshal(rawField, &entry); err != nil {
-			return nil, err
+			return func(yield func(types.Token) bool) {}
 		}
 
 		precision, err := dtype.Parse(entry.DType)
 
 		if err != nil {
-			return nil, err
+			return func(yield func(types.Token) bool) {}
 		}
 
 		tokens = append(tokens, types.Token{
@@ -130,7 +130,7 @@ func (archiveParser *archiveParser) Generate() (iter.Seq[types.Token], error) {
 				return
 			}
 		}
-	}, nil
+	}
 }
 
 func newArchiveParser(tb testing.TB, archive []byte) types.Parser {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/dtype"
+	"github.com/theapemachine/manifesto/ir"
 )
 
 /*
@@ -112,9 +114,11 @@ func Fuse(graph *ast.Graph) (FusionStats, error) {
 		}
 
 		fused := &ast.GraphNode{
-			ID:     node.ID,
-			Op:     FuseOp,
-			Inputs: append([]string(nil), cluster.inputs...),
+			ID:         node.ID,
+			Op:         FuseOp,
+			Inputs:     append([]string(nil), cluster.inputs...),
+			InputTypes: fusionInputTypes(graph, cluster.inputs),
+			OutputType: node.OutputType,
 			Attributes: map[string]any{
 				FuseAttributeAST: fusionAST,
 			},
@@ -231,8 +235,7 @@ func (builder *clusterBuilder) buildOperand(inputName string) *ASTNode {
 
 	if _, already := builder.absorbedIndices[producerIndex]; already {
 		// Producer already absorbed by a sibling branch within the same
-		// cluster; would need a CSE pass to deduplicate. For now keep it
-		// external so the value is materialized once.
+		// cluster; keep the value external so it is materialized once.
 		return builder.externalInput(inputName)
 	}
 
@@ -273,4 +276,49 @@ func (builder *clusterBuilder) containedIDs() []string {
 	}
 
 	return out
+}
+
+func fusionInputTypes(graph *ast.Graph, inputNames []string) []ir.PortType {
+	producerTypes := make(map[string]ir.PortType, len(graph.Nodes))
+
+	for _, graphNode := range graph.Nodes {
+		if graphNode == nil || graphNode.OutputType.DType == dtype.Invalid {
+			continue
+		}
+
+		producerTypes[graphNode.ID] = graphNode.OutputType
+	}
+
+	inputTypes := make([]ir.PortType, len(inputNames))
+
+	for index, inputName := range inputNames {
+		if portType, ok := producerTypes[inputName]; ok {
+			inputTypes[index] = portType
+			continue
+		}
+
+		inputTypes[index] = boundaryInputPortType(graph, inputName)
+	}
+
+	return inputTypes
+}
+
+func boundaryInputPortType(graph *ast.Graph, inputName string) ir.PortType {
+	for _, graphNode := range graph.Nodes {
+		if graphNode == nil {
+			continue
+		}
+
+		for slotIndex, producerID := range graphNode.Inputs {
+			if producerID != inputName {
+				continue
+			}
+
+			if slotIndex < len(graphNode.InputTypes) {
+				return graphNode.InputTypes[slotIndex]
+			}
+		}
+	}
+
+	return ir.PortType{}
 }

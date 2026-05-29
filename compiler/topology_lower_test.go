@@ -399,7 +399,7 @@ main:
     out: user_text
 `)
 
-		programCompiler, err := NewProgramCompiler(NewPool(nil))
+		programCompiler, err := NewProgramCompiler(context.Background(), NewPool(nil))
 
 		convey.So(err, convey.ShouldBeNil)
 
@@ -450,7 +450,7 @@ system:
 `)
 
 		resolver := &fakeResolver{payload: blockYAML}
-		programCompiler, _ := NewProgramCompiler(NewPool(nil))
+		programCompiler, _ := NewProgramCompiler(context.Background(), NewPool(nil))
 		programCompiler = programCompiler.
 			WithIncludeResolver(resolver).
 			DisableTyper().

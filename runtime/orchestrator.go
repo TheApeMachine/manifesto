@@ -123,6 +123,7 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 	}
 
 	manifestCompiler, err := compiler.NewProgramCompiler(
+		ctx,
 		compiler.NewPool(catalog.NewFS(asset.TemplateFS())),
 	)
 

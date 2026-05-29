@@ -168,7 +168,7 @@ func TestPlanGraph_ProducesNonOverlappingOffsets(test *testing.T) {
 			},
 		}
 
-		topology, err := PlanGraph(graph)
+		topology, err := PlanGraph(graph, PlanGraphOptions{})
 
 		convey.Convey("Planning succeeds", func() {
 			convey.So(err, convey.ShouldBeNil)
@@ -217,7 +217,7 @@ func TestPlanGraph_ReusesOffsetWhenLifetimesDoNotOverlap(test *testing.T) {
 			},
 		}
 
-		topology, err := PlanGraph(graph)
+		topology, err := PlanGraph(graph, PlanGraphOptions{})
 
 		convey.So(err, convey.ShouldBeNil)
 
@@ -260,7 +260,7 @@ func TestPlanGraph_PropagatesSymbolBindings(test *testing.T) {
 			},
 		}
 
-		topology, err := PlanGraph(graph)
+		topology, err := PlanGraph(graph, PlanGraphOptions{})
 
 		convey.Convey("Planning succeeds with the binding resolving B", func() {
 			convey.So(err, convey.ShouldBeNil)
@@ -288,7 +288,7 @@ func TestPlanGraph_RejectsUnboundSymbol(test *testing.T) {
 			},
 		}
 
-		_, err := PlanGraph(graph)
+		_, err := PlanGraph(graph, PlanGraphOptions{})
 
 		convey.Convey("Planning fails with an unbound-symbol error", func() {
 			convey.So(err, convey.ShouldNotBeNil)

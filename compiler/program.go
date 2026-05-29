@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 
+	"github.com/theapemachine/errnie"
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/catalog"
 	"github.com/theapemachine/manifesto/codegen"
@@ -13,6 +14,7 @@ import (
 	"github.com/theapemachine/manifesto/optimizer"
 	"github.com/theapemachine/manifesto/parse"
 	"github.com/theapemachine/manifesto/typer"
+	"github.com/theapemachine/manifesto/types"
 )
 
 /*
@@ -28,10 +30,7 @@ CompileOutput is the compiled program and named compute graphs.
 
 Workspaces is the planner's output for each graph that was successfully
 typed and planned during CompileAssets. The map is keyed by the same
-graph name CompileOutput.Graphs uses. Empty when the planner is not
-enabled (the default during the staged Phase 1.2 rollout) or when a
-given graph could not be planned (e.g., the typer left an edge with
-dtype.Invalid).
+graph name CompileOutput.Graphs uses.
 */
 type CompileOutput struct {
 	Program       *ast.Program
@@ -56,40 +55,57 @@ func NewPool(catalogInstance catalog.Catalog) *Pool {
 
 /*
 ProgramCompiler parses and compiles manifest program YAML into runtime IR.
-Graph lowering is filled in as the ARCHITECTURE.md pipeline lands in manifesto.
 */
 type ProgramCompiler struct {
-	pool             *Pool
-	parser           *parse.Parser
-	resolver         IncludeResolver
-	typerOptions     typer.Options
-	skipTyper        bool
-	optimizerOptions optimizer.Options
-	skipOptimizer    bool
-	codegenOptions   codegen.EmitOptions
-	skipCodegen      bool
-	plannerBindings  ir.SymbolMap
+	ctx               context.Context
+	cancel            context.CancelFunc
+	pool              *Pool
+	parser            *parse.Parser
+	resolver          IncludeResolver
+	operationRegistry *types.OperationRegistry
+	typerOptions      typer.Options
+	skipTyper         bool
+	optimizerOptions  optimizer.Options
+	skipOptimizer     bool
+	codegenOptions    codegen.EmitOptions
+	skipCodegen       bool
+	plannerBindings   ir.SymbolMap
+	streamSchedule    ir.StreamScheduleOptions
 }
 
 /*
 NewProgramCompiler constructs a program compiler from host-provided dependencies.
 */
-func NewProgramCompiler(pool *Pool) (*ProgramCompiler, error) {
-	if pool == nil {
-		return nil, fmt.Errorf("compiler: asset pool is required")
+func NewProgramCompiler(ctx context.Context, pool *Pool) (*ProgramCompiler, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	registry, err := types.NewOperationRegistry()
+
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("compiler: operation registry: %w", err)
 	}
 
-	return &ProgramCompiler{
-		pool:   pool,
-		parser: parse.NewParser(),
-	}, nil
+	programCompiler := &ProgramCompiler{
+		ctx:               ctx,
+		cancel:            cancel,
+		pool:              pool,
+		parser:            parse.NewParser(),
+		operationRegistry: registry,
+	}
+
+	return programCompiler, errnie.Require(map[string]any{
+		"ctx":               programCompiler.ctx,
+		"cancel":            programCompiler.cancel,
+		"pool":              pool,
+		"operationRegistry": programCompiler.operationRegistry,
+	})
 }
 
 /*
 WithIncludeResolver injects a resolver used to materialize block YAML for
-`include:` references in a program manifest. Without a resolver, includes are
-silently skipped — programs that reference only host ops (no graph.call) still
-compile.
+`include:` references in a program manifest. CompileAssets returns an error
+when a program declares includes but no resolver is configured.
 */
 func (programCompiler *ProgramCompiler) WithIncludeResolver(resolver IncludeResolver) *ProgramCompiler {
 	if programCompiler == nil {
@@ -194,12 +210,6 @@ WithPlannerBindings injects runtime-supplied SymbolMap entries (max
 sequence length, max batch size, etc.) into the static memory planner.
 These merge with the typer's edge-unified bindings so PortByteSize can
 size every dynamic dimension at compile time.
-
-The planner itself always runs as part of CompileAssets — it produces
-the workspace layout the runtime executor depends on
-(ARCHITECTURE.md §5.1 / §6). Callers that need to size dynamic
-dimensions must supply bindings here, or the planner will reject the
-graph with an "unbound symbol" diagnostic.
 */
 func (programCompiler *ProgramCompiler) WithPlannerBindings(bindings ir.SymbolMap) *ProgramCompiler {
 	if programCompiler == nil {
@@ -212,17 +222,33 @@ func (programCompiler *ProgramCompiler) WithPlannerBindings(bindings ir.SymbolMa
 }
 
 /*
+WithStreamSchedule configures ARCHITECTURE.md §4.4 stream partitioning on
+the planned topology. Zero MaxStreams lets the scheduler use the topology
+width as the stream cap.
+*/
+func (programCompiler *ProgramCompiler) WithStreamSchedule(options ir.StreamScheduleOptions) *ProgramCompiler {
+	if programCompiler == nil {
+		return nil
+	}
+
+	programCompiler.streamSchedule = options
+
+	return programCompiler
+}
+
+/*
 CompileAssets parses one program manifest, resolves its include directives,
-lowers each included topology into both ast.Graph and dag.Graph
-representations, and returns the assembled CompileOutput.
+lowers each included topology, runs the typer → optimizer → codegen pipeline,
+materializes a fresh dag.Graph from the final ast.Graph, and plans workspace
+layout for every typed graph.
 */
 func (programCompiler *ProgramCompiler) CompileAssets(
 	ctx context.Context,
 	input CompileInput,
 	assetFS fs.FS,
 ) (*CompileOutput, error) {
+	_ = ctx
 	_ = assetFS
-	_ = input.CacheDir
 
 	if len(input.ProgramYAML) == 0 {
 		return nil, fmt.Errorf("compiler: program yaml is required")
@@ -254,32 +280,14 @@ func (programCompiler *ProgramCompiler) CompileAssets(
 			return nil, &ResolverError{Include: name, Cause: err}
 		}
 
-		lowered, err := lowerBlock(name, blockYAML)
+		graph, computeGraph, err := programCompiler.compileIncludeGraph(name, blockYAML)
 
 		if err != nil {
 			return nil, &ResolverError{Include: name, Cause: err}
 		}
 
-		if !programCompiler.skipTyper {
-			if _, err := typer.Run(lowered.AST, programCompiler.typerOptions); err != nil {
-				return nil, &ResolverError{Include: name, Cause: err}
-			}
-		}
-
-		if !programCompiler.skipOptimizer {
-			if _, err := optimizer.Run(lowered.AST, programCompiler.optimizerOptions); err != nil {
-				return nil, &ResolverError{Include: name, Cause: err}
-			}
-		}
-
-		if !programCompiler.skipCodegen {
-			if _, err := codegen.AttachKernels(lowered.AST, programCompiler.codegenOptions); err != nil {
-				return nil, &ResolverError{Include: name, Cause: err}
-			}
-		}
-
-		graphs[name] = lowered.AST
-		computeGraphs[name] = lowered.DAG
+		graphs[name] = graph
+		computeGraphs[name] = computeGraph
 	}
 
 	workspaces, err := programCompiler.runPlanner(graphs)
@@ -296,29 +304,55 @@ func (programCompiler *ProgramCompiler) CompileAssets(
 	}, nil
 }
 
-/*
-runPlanner is the post-typer planner pass. Every typed graph is
-converted into an *ir.Topology via TopologyForPlanning and then planned
-via ir.PlanWorkspace; the resulting topology — with WorkspaceLayout
-populated — is returned keyed by graph name.
+func (programCompiler *ProgramCompiler) compileIncludeGraph(
+	name string,
+	blockYAML []byte,
+) (*ast.Graph, *dag.Graph, error) {
+	lowered, err := lowerBlock(name, blockYAML)
 
-The planner is bypassed when the typer was disabled: typing is a hard
-prerequisite (PortByteSize needs Port.Type.DType and ShapeSchema
-populated, both of which the typer fills in), so calling the planner
-on untyped graphs would just throw "dtype Invalid" errors. Tests that
-DisableTyper are exercising structural lowering in isolation and don't
-need workspace output. Production paths (the orchestrator) never
-disable the typer, so this carve-out doesn't affect runtime behaviour.
+	if err != nil {
+		return nil, nil, err
+	}
 
-Caller-supplied bindings are merged with the typer's edge-unified
-bindings so runtime dimension bounds (max_seq_len, max_batch, etc.) and
-compile-time bindings both feed the planner. Conflicts surface as
-panics from mergeSymbolMaps because the typer has already caught any
-contradiction long before the planner sees the graph.
+	graph := lowered.AST
 
-Failures are wrapped with the graph name so the diagnostic points at
-the offending include directly.
-*/
+	if !programCompiler.skipTyper {
+		if _, err := typer.Run(graph, programCompiler.typerOptions); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if !programCompiler.skipOptimizer {
+		if _, err := optimizer.Run(graph, programCompiler.optimizerOptions); err != nil {
+			return nil, nil, err
+		}
+
+		if !programCompiler.skipTyper {
+			if _, err := typer.Run(graph, programCompiler.typerOptions); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	if !programCompiler.skipCodegen {
+		if _, err := codegen.AttachKernels(graph, programCompiler.codegenOptions); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if err := validateGraphOps(graph, programCompiler.operationRegistry); err != nil {
+		return nil, nil, err
+	}
+
+	computeGraph, err := BuildDAGFromGraph(graph)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return graph, computeGraph, nil
+}
+
 func (programCompiler *ProgramCompiler) runPlanner(
 	graphs map[string]*ast.Graph,
 ) (map[string]*ir.Topology, error) {
@@ -337,7 +371,12 @@ func (programCompiler *ProgramCompiler) runPlanner(
 
 		graph.Bindings = mergedBindings
 
-		topology, err := PlanGraph(graph)
+		topology, err := PlanGraph(graph, PlanGraphOptions{
+			Registry:       programCompiler.operationRegistry,
+			Bindings:       mergedBindings,
+			Align:          64,
+			StreamSchedule: programCompiler.streamSchedule,
+		})
 
 		if err != nil {
 			return nil, fmt.Errorf("compiler: plan graph %q: %w", name, err)
@@ -349,13 +388,6 @@ func (programCompiler *ProgramCompiler) runPlanner(
 	return workspaces, nil
 }
 
-/*
-mergeSymbolMaps returns a new SymbolMap containing every binding from
-both inputs. When the same symbol appears on both sides with the same
-value it is idempotent; conflicting values are returned as compiler
-errors because caller-provided planner bounds may contradict a graph's
-concrete type bindings.
-*/
 func mergeSymbolMaps(base, overlay ir.SymbolMap) (ir.SymbolMap, error) {
 	merged := make(ir.SymbolMap, len(base)+len(overlay))
 
@@ -377,11 +409,6 @@ func mergeSymbolMaps(base, overlay ir.SymbolMap) (ir.SymbolMap, error) {
 	return merged, nil
 }
 
-/*
-lowerBlock parses one block YAML payload into an ast.Topology and lowers it
-into the LoweredGraph pair. Block payloads must contain a topology section
-either at the document root or under `system.topology`.
-*/
 func lowerBlock(name string, blockYAML []byte) (*LoweredGraph, error) {
 	block, err := parse.BlockModelFromYAML(blockYAML)
 

@@ -6,60 +6,47 @@ import (
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/ir"
+	"github.com/theapemachine/manifesto/optimizer"
+	"github.com/theapemachine/manifesto/types"
 )
 
 /*
-TopologyForPlanning builds an *ir.Topology from a typed *ast.Graph so the
-static memory planner (ir.PlanWorkspace) has a structure it can run
-liveness + interval coloring over.
-
-Why this bridge exists:
-
-  - The runtime dispatcher walks an *ast.Graph (the lowered topology
-    output of compiler.LowerTopology). Each GraphNode carries the
-    operation kind, its bound weights, and — after the typer pass —
-    the unified PortType for each input slot and the output.
-  - The static memory planner in manifesto/ir operates on *ir.Topology,
-    which encodes the same shape with *ir.Node and *ir.Port. PlanWorkspace
-    needs every Port.Type populated (DType, ShapeSchema) before it can
-    compute byte sizes via PortByteSize.
-  - The planner also needs the producer's output Port and every
-    downstream consumer's input Port at that edge to be the *same Port
-    pointer, so liveness analysis correctly extends the producer's
-    lifetime to the last consumer's step.
-
-This function takes the typed *ast.Graph and produces the equivalent
-*ir.Topology with the sharing relationship intact. Graph-boundary inputs
-(those declared on graph.Inputs without a producing node) become Port
-instances whose type is adopted from the first consumer's InputTypes
-slot — the typer has already unified the boundary's permissive type with
-that consumer's expected type, so InputTypes carries the concrete shape
-the planner needs.
-
-The graph must be typed (typer.Run has been called) for the resulting
-topology to be plannable. Untyped graphs produce Ports with dtype.Invalid
-which PortByteSize rejects with a clear error.
+planningBridge is the typed *ir.Topology equivalent of one *ast.Graph,
+together with the port maps needed to populate ARCHITECTURE.md §6
+InputPorts / OutputPorts after workspace planning.
 */
-func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
+type planningBridge struct {
+	Topology      *ir.Topology
+	BoundaryPorts map[string]*ir.Port
+	ProducerPorts map[string]*ir.Port
+}
+
+/*
+buildPlanningTopology converts a typed *ast.Graph into *ir.Topology with
+shared *ir.Port pointers across producer/consumer edges. graph.Nodes must
+already be in topological order (NormalizeGraph).
+*/
+func buildPlanningTopology(
+	graph *ast.Graph,
+	registry *types.OperationRegistry,
+) (*planningBridge, error) {
 	if graph == nil {
-		return nil
+		return nil, fmt.Errorf("compiler: graph is required")
 	}
 
 	topology := &ir.Topology{
 		Kind: ir.KindTopology,
 	}
 
-	// producerOutputs[node.ID] points at the *ir.Port that node produces.
-	// Every downstream input that references node.ID resolves to this
-	// exact pointer so the planner sees a shared edge.
 	producerOutputs := make(map[string]*ir.Port, len(graph.Nodes))
-
-	// boundaryInputs[name] points at the *ir.Port created for one graph-
-	// level input declaration. Shared across all consumers that read the
-	// same boundary input. Type is adopted from the first consumer.
 	boundaryInputs := make(map[string]*ir.Port, len(graph.Inputs))
+	boundarySet := boundaryInputSet(graph)
 
 	for _, name := range graph.Inputs {
+		if name == "" {
+			continue
+		}
+
 		boundaryInputs[name] = &ir.Port{}
 	}
 
@@ -68,45 +55,25 @@ func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
 			continue
 		}
 
-		irNode := &ir.Node{
-			Kind:    ir.KindNode,
-			Name:    node.ID,
-			Inputs:  make([]*ir.Port, len(node.Inputs)),
-			Outputs: nil,
+		irNode, err := newPlanningNode(node, registry)
+
+		if err != nil {
+			return nil, fmt.Errorf("compiler: node %q: %w", node.ID, err)
 		}
 
 		for slotIndex, producerID := range node.Inputs {
-			if port, ok := producerOutputs[producerID]; ok {
-				irNode.Inputs[slotIndex] = port
-				continue
+			port, err := resolvePlanningInputPort(
+				node, slotIndex, producerID,
+				producerOutputs, boundaryInputs, boundarySet,
+			)
+
+			if err != nil {
+				return nil, err
 			}
 
-			boundary, isBoundary := boundaryInputs[producerID]
-
-			if !isBoundary {
-				// Producer that hasn't been seen yet — graph isn't
-				// topologically clean. Fabricate a placeholder so the
-				// planner can still walk the structure; PortByteSize will
-				// reject it with a clear "unbound" error.
-				boundary = &ir.Port{}
-				boundaryInputs[producerID] = boundary
-			}
-
-			// The typer's edge-unified InputTypes carry the concrete
-			// PortType for this boundary edge. Adopt it the first time
-			// we see a consumer for this boundary name so the planner
-			// can size the boundary tensor.
-			if boundary.Type.DType == dtype.Invalid && slotIndex < len(node.InputTypes) {
-				boundary.Type = node.InputTypes[slotIndex]
-			}
-
-			irNode.Inputs[slotIndex] = boundary
+			irNode.Inputs[slotIndex] = port
 		}
 
-		// Every GraphNode produces exactly one output, identified by
-		// node.ID. The typer's OutputType is the unified producer type
-		// after all downstream consumers have had a chance to constrain
-		// it; that's the PortType the planner uses to size this output.
 		outputPort := planningOutputPort(node, irNode)
 
 		irNode.Outputs = []*ir.Port{outputPort}
@@ -115,7 +82,75 @@ func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
 		topology.Nodes = append(topology.Nodes, irNode)
 	}
 
-	return topology
+	return &planningBridge{
+		Topology:      topology,
+		BoundaryPorts: boundaryInputs,
+		ProducerPorts: producerOutputs,
+	}, nil
+}
+
+func newPlanningNode(node *ast.GraphNode, registry *types.OperationRegistry) (*ir.Node, error) {
+	op := types.Op(node.Op)
+
+	irNode := &ir.Node{
+		Kind:   ir.KindNode,
+		Name:   node.ID,
+		Op:     op,
+		Inputs: make([]*ir.Port, len(node.Inputs)),
+	}
+
+	if node.Op == optimizer.FuseOp || isCompilerIntrinsicOp(node.Op) {
+		return irNode, nil
+	}
+
+	if registry == nil {
+		return irNode, nil
+	}
+
+	bindMethod, err := op.BindMethod(registry)
+
+	if err != nil {
+		return nil, err
+	}
+
+	irNode.BindMethod = bindMethod
+
+	return irNode, nil
+}
+
+func resolvePlanningInputPort(
+	node *ast.GraphNode,
+	slotIndex int,
+	producerID string,
+	producerOutputs map[string]*ir.Port,
+	boundaryInputs map[string]*ir.Port,
+	boundarySet map[string]struct{},
+) (*ir.Port, error) {
+	if port, ok := producerOutputs[producerID]; ok {
+		return port, nil
+	}
+
+	boundary, isBoundary := boundaryInputs[producerID]
+
+	if !isBoundary {
+		if _, isDeclaredNode := boundarySet[producerID]; isDeclaredNode {
+			return nil, fmt.Errorf(
+				"compiler: node %q input %q: graph input used before declaration in graph.Inputs",
+				node.ID, producerID,
+			)
+		}
+
+		return nil, fmt.Errorf(
+			"compiler: node %q input %q: producer %q is not defined before consumer (run NormalizeGraph)",
+			node.ID, producerID, producerID,
+		)
+	}
+
+	if boundary.Type.DType == dtype.Invalid && slotIndex < len(node.InputTypes) {
+		boundary.Type = node.InputTypes[slotIndex]
+	}
+
+	return boundary, nil
 }
 
 func planningOutputPort(node *ast.GraphNode, irNode *ir.Node) *ir.Port {
@@ -138,42 +173,129 @@ func planningAliasOp(op string) bool {
 }
 
 /*
-PlanGraph types-then-plans a single *ast.Graph and returns the resulting
-*ir.Topology with its Workspace populated. The graph must already have
-been processed by the typer (graph.Bindings and per-node InputTypes /
-OutputType set) — typically this means programCompiler.CompileAssets has
-run typer.Run on it before reaching the planner.
-
-Plan options:
-
-  - Bindings comes from graph.Bindings, the SymbolMap the typer
-    accumulated by unifying every edge. Any dynamic dimension that did
-    not get bound during unification will surface as an "unbound symbol"
-    error from PortByteSize, which is the right failure mode — the
-    program author needs to provide a binding (max sequence length, max
-    batch, etc.) for the planner to size the workspace.
-  - Align defaults to 64 bytes, matching ARCHITECTURE.md §5.1's
-    AVX-512-cache-line / Apple Silicon / CUDA-cache-line floor.
+attachGraphIOPorts maps manifest graph inputs and outputs to workspace byte
+offsets per ARCHITECTURE.md §6.
 */
-func PlanGraph(graph *ast.Graph) (*ir.Topology, error) {
+func attachGraphIOPorts(
+	topology *ir.Topology,
+	graph *ast.Graph,
+	bridge *planningBridge,
+) error {
+	if topology == nil || graph == nil || bridge == nil {
+		return fmt.Errorf("compiler: attach graph io ports: missing topology or graph")
+	}
+
+	topology.InputPorts = make(map[string]int32, len(graph.Inputs))
+
+	for _, inputName := range graph.Inputs {
+		if inputName == "" {
+			continue
+		}
+
+		port := bridge.BoundaryPorts[inputName]
+
+		if port == nil || port.Allocation == nil {
+			return fmt.Errorf("compiler: graph input %q has no workspace allocation", inputName)
+		}
+
+		topology.InputPorts[inputName] = int32(port.Allocation.BaseOffset)
+	}
+
+	topology.OutputPorts = make(map[string]int32, len(graph.Outputs))
+
+	for outputName, producerID := range graph.Outputs {
+		if outputName == "" {
+			continue
+		}
+
+		port := bridge.ProducerPorts[producerID]
+
+		if port == nil || port.Allocation == nil {
+			return fmt.Errorf(
+				"compiler: graph output %q producer %q has no workspace allocation",
+				outputName, producerID,
+			)
+		}
+
+		topology.OutputPorts[outputName] = int32(port.Allocation.BaseOffset)
+	}
+
+	return nil
+}
+
+/*
+PlanGraphOptions configures workspace planning and stream scheduling for
+one *ast.Graph.
+*/
+type PlanGraphOptions struct {
+	Registry       *types.OperationRegistry
+	Bindings       ir.SymbolMap
+	Align          int64
+	StreamSchedule ir.StreamScheduleOptions
+}
+
+/*
+PlanGraph normalizes, bridges, plans workspace, maps graph I/O ports, and
+runs stream scheduling. The graph must already have been processed by the
+typer (graph.Bindings and per-node InputTypes / OutputType set).
+*/
+func PlanGraph(graph *ast.Graph, options PlanGraphOptions) (*ir.Topology, error) {
 	if graph == nil {
 		return nil, fmt.Errorf("compiler: graph is required")
 	}
 
-	topology := TopologyForPlanning(graph)
+	if err := NormalizeGraph(graph); err != nil {
+		return nil, fmt.Errorf("compiler: plan graph: %w", err)
+	}
 
-	bindings := graph.Bindings
+	bridge, err := buildPlanningTopology(graph, options.Registry)
+
+	if err != nil {
+		return nil, fmt.Errorf("compiler: plan graph: %w", err)
+	}
+
+	bindings := options.Bindings
+
+	if bindings == nil {
+		bindings = graph.Bindings
+	}
 
 	if bindings == nil {
 		bindings = ir.SymbolMap{}
 	}
 
-	if err := ir.PlanWorkspace(topology, ir.PlanWorkspaceOptions{
-		Bindings: bindings,
-		Align:    64,
-	}); err != nil {
-		return topology, fmt.Errorf("compiler: plan workspace: %w", err)
+	align := options.Align
+
+	if align <= 0 {
+		align = 64
 	}
 
-	return topology, nil
+	if err := ir.PlanWorkspace(bridge.Topology, ir.PlanWorkspaceOptions{
+		Bindings: bindings,
+		Align:    align,
+	}); err != nil {
+		return bridge.Topology, fmt.Errorf("compiler: plan workspace: %w", err)
+	}
+
+	if err := attachGraphIOPorts(bridge.Topology, graph, bridge); err != nil {
+		return bridge.Topology, fmt.Errorf("compiler: plan graph: %w", err)
+	}
+
+	if err := ir.ScheduleStreams(bridge.Topology, options.StreamSchedule); err != nil {
+		return bridge.Topology, fmt.Errorf("compiler: schedule streams: %w", err)
+	}
+
+	return bridge.Topology, nil
+}
+
+// TopologyForPlanning is retained for tests that build planning bridges
+// without running the full PlanGraph pipeline.
+func TopologyForPlanning(graph *ast.Graph) *ir.Topology {
+	bridge, err := buildPlanningTopology(graph, nil)
+
+	if err != nil || bridge == nil {
+		return nil
+	}
+
+	return bridge.Topology
 }

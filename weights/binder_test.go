@@ -52,12 +52,12 @@ type tokenParser struct {
 	tokens []types.Token
 }
 
-func (parser tokenParser) Generate() (iter.Seq[types.Token], error) {
+func (parser tokenParser) Generate() iter.Seq[types.Token] {
 	return func(yield func(types.Token) bool) {
 		for _, token := range parser.tokens {
 			if !yield(token) {
 				return
 			}
 		}
-	}, nil
+	}
 }

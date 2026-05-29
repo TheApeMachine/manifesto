@@ -1,27 +1,37 @@
 package compiler
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"iter"
 	"testing"
 
 	"github.com/smartystreets/goconvey/convey"
+	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/ir"
 	"github.com/theapemachine/manifesto/types"
 )
 
-func TestCompilerCompile(t *testing.T) {
-	convey.Convey("Given a safetensors parser", t, func() {
+func TestCompilerBuild(t *testing.T) {
+	convey.Convey("Given a topology recipe and safetensors parser", t, func() {
 		parser := newTestParser(t, testArchive(t))
-		compiler, err := NewCompiler(parser)
+		compiler, err := NewCompiler(context.Background(), nil, parser)
 		convey.So(err, convey.ShouldBeNil)
 
+		topology := &ast.Topology{
+			Nodes: []ast.Node{
+				{ID: "x_embedder", Op: "projection.linear"},
+				{ID: "transformer_blocks.0.attn.norm_q", Op: "math.rmsnorm"},
+			},
+		}
+
 		convey.Convey("It should build Project → Architecture → Topology → Node", func() {
-			project, err := compiler.Compile()
+			project, err := compiler.WithTopology(topology).Build()
 			convey.So(err, convey.ShouldBeNil)
 			convey.So(project.Kind, convey.ShouldEqual, ir.KindResearchProject)
+			convey.So(project.Metadata["model_type"], convey.ShouldEqual, "flux")
 			convey.So(project.Architecture, convey.ShouldNotBeNil)
 			convey.So(project.Architecture.Topology, convey.ShouldNotBeNil)
 			convey.So(len(project.Architecture.Topology.Nodes), convey.ShouldEqual, 2)
@@ -29,39 +39,38 @@ func TestCompilerCompile(t *testing.T) {
 			embedder := project.Node("x_embedder")
 			convey.So(embedder, convey.ShouldNotBeNil)
 			convey.So(embedder.Kind, convey.ShouldEqual, ir.KindNode)
-			convey.So(embedder.Operation, convey.ShouldEqual, ir.OperationMatmul)
+			convey.So(embedder.Op, convey.ShouldEqual, types.Op("projection.linear"))
+			convey.So(embedder.BindMethod, convey.ShouldEqual, "Matmul")
 			convey.So(embedder.Weight.HasTensor(), convey.ShouldBeTrue)
 			convey.So(embedder.Weight.Tensor.Name, convey.ShouldEqual, "x_embedder.weight")
 
 			norm := project.Node("transformer_blocks.0.attn.norm_q")
 			convey.So(norm, convey.ShouldNotBeNil)
-			convey.So(norm.Operation, convey.ShouldEqual, ir.OperationRMSNorm)
+			convey.So(norm.Op, convey.ShouldEqual, types.Op("math.rmsnorm"))
+			convey.So(norm.BindMethod, convey.ShouldEqual, "RMSNorm")
 		})
 	})
 }
 
-func TestOperationLookupResolve(t *testing.T) {
-	convey.Convey("Given an operation lookup table", t, func() {
-		operationLookup := NewOperationLookup()
-
-		convey.Convey("It should map known fragments to operations", func() {
-			convey.So(operationLookup.Resolve("x_embedder", 2), convey.ShouldEqual, ir.OperationMatmul)
-			convey.So(operationLookup.Resolve("transformer_blocks.0.attn.norm_q", 1), convey.ShouldEqual, ir.OperationRMSNorm)
-			convey.So(operationLookup.Resolve("time_guidance_embed.time_proj", 2), convey.ShouldEqual, ir.OperationLookup)
-		})
-	})
-}
-
-func BenchmarkCompilerCompile(b *testing.B) {
+func BenchmarkCompilerBuild(b *testing.B) {
 	parser := newTestParser(b, testArchive(b))
-	compiler, err := NewCompiler(parser)
+	compiler, err := NewCompiler(context.Background(), nil, parser)
 
 	if err != nil {
 		b.Fatal(err)
 	}
 
+	topology := &ast.Topology{
+		Nodes: []ast.Node{
+			{ID: "x_embedder", Op: "projection.linear"},
+			{ID: "transformer_blocks.0.attn.norm_q", Op: "math.rmsnorm"},
+		},
+	}
+
+	compiler = compiler.WithTopology(topology)
+
 	for b.Loop() {
-		if _, err := compiler.Compile(); err != nil {
+		if _, err := compiler.Build(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -71,14 +80,14 @@ type testParser struct {
 	archive []byte
 }
 
-func (testParser *testParser) Generate() (iter.Seq[types.Token], error) {
+func (testParser *testParser) Generate() iter.Seq[types.Token] {
 	headerLength := binary.LittleEndian.Uint64(testParser.archive[:8])
 	headerBytes := testParser.archive[8 : 8+headerLength]
 
 	fields := make(map[string]json.RawMessage)
 
 	if err := json.Unmarshal(headerBytes, &fields); err != nil {
-		return nil, err
+		return func(yield func(types.Token) bool) {}
 	}
 
 	tokens := make([]types.Token, 0, len(fields))
@@ -88,7 +97,7 @@ func (testParser *testParser) Generate() (iter.Seq[types.Token], error) {
 			var metadata map[string]string
 
 			if err := json.Unmarshal(rawField, &metadata); err != nil {
-				return nil, err
+				return func(yield func(types.Token) bool) {}
 			}
 
 			for key, value := range metadata {
@@ -109,13 +118,13 @@ func (testParser *testParser) Generate() (iter.Seq[types.Token], error) {
 		}
 
 		if err := json.Unmarshal(rawField, &entry); err != nil {
-			return nil, err
+			return func(yield func(types.Token) bool) {}
 		}
 
 		precision, err := dtype.Parse(entry.DType)
 
 		if err != nil {
-			return nil, err
+			return func(yield func(types.Token) bool) {}
 		}
 
 		tokens = append(tokens, types.Token{
@@ -136,7 +145,7 @@ func (testParser *testParser) Generate() (iter.Seq[types.Token], error) {
 				return
 			}
 		}
-	}, nil
+	}
 }
 
 func newTestParser(tb testing.TB, archive []byte) types.Parser {

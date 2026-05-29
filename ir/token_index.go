@@ -23,11 +23,7 @@ func NewTokenIndex(parser types.Parser) (*TokenIndex, error) {
 		return nil, fmt.Errorf("token index: parser is required")
 	}
 
-	sequence, err := parser.Generate()
-
-	if err != nil {
-		return nil, fmt.Errorf("token index: generate tokens: %w", err)
-	}
+	sequence := parser.Generate()
 
 	tokenIndex := &TokenIndex{
 		tensors:  make(map[string]types.Token),
