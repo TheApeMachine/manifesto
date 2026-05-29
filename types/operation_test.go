@@ -32,6 +32,12 @@ func TestNewOperationRegistryLoadsSchemas(t *testing.T) {
 		registry, err := NewOperationRegistry()
 		convey.So(err, convey.ShouldBeNil)
 
+		convey.Convey("It should register shape.cast", func() {
+			schema, ok := registry.Lookup(Op("shape.cast"))
+			convey.So(ok, convey.ShouldBeTrue)
+			convey.So(schema.Bind.Method, convey.ShouldEqual, "shape.cast")
+		})
+
 		convey.Convey("It should register activation.gelu", func() {
 			schema, ok := registry.Lookup(Op("activation.gelu"))
 			convey.So(ok, convey.ShouldBeTrue)

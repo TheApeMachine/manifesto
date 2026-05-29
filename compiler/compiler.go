@@ -68,6 +68,27 @@ func (compiler *Compiler) WithTopology(topology *ast.Topology) *Compiler {
 }
 
 /*
+CompileTopology lowers the attached topology recipe, binds checkpoint
+weights when a parser is configured, and runs the shared graph pipeline.
+*/
+func (compiler *Compiler) CompileTopology() (*CompiledGraph, error) {
+	if compiler.topology == nil {
+		return nil, fmt.Errorf("compiler: topology is required")
+	}
+
+	lowered, err := LowerTopology(compiler.topology)
+
+	if err != nil {
+		return nil, fmt.Errorf("compiler: lower topology: %w", err)
+	}
+
+	return CompileGraph(lowered.AST, GraphCompileOptions{
+		OperationRegistry: compiler.registry,
+		WeightParser:      compiler.parser,
+	})
+}
+
+/*
 Build materializes Project → Architecture → Topology → Node from the
 attached topology recipe and checkpoint tokens yielded by the parser.
 */

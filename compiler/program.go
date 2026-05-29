@@ -63,6 +63,8 @@ type ProgramCompiler struct {
 	parser            *parse.Parser
 	resolver          IncludeResolver
 	operationRegistry *types.OperationRegistry
+	weightParser      types.Parser
+	weightMap         map[string]string
 	typerOptions      typer.Options
 	skipTyper         bool
 	optimizerOptions  optimizer.Options
@@ -222,6 +224,24 @@ func (programCompiler *ProgramCompiler) WithPlannerBindings(bindings ir.SymbolMa
 }
 
 /*
+WithWeightParser binds checkpoint tensors onto lowered graphs before the
+typer pass. WeightMap maps graph node IDs to explicit SafeTensors names.
+*/
+func (programCompiler *ProgramCompiler) WithWeightParser(
+	parser types.Parser,
+	weightMap map[string]string,
+) *ProgramCompiler {
+	if programCompiler == nil {
+		return nil
+	}
+
+	programCompiler.weightParser = parser
+	programCompiler.weightMap = weightMap
+
+	return programCompiler
+}
+
+/*
 WithStreamSchedule configures ARCHITECTURE.md §4.4 stream partitioning on
 the planned topology. Zero MaxStreams lets the scheduler use the topology
 width as the stream cap.
@@ -314,43 +334,23 @@ func (programCompiler *ProgramCompiler) compileIncludeGraph(
 		return nil, nil, err
 	}
 
-	graph := lowered.AST
-
-	if !programCompiler.skipTyper {
-		if _, err := typer.Run(graph, programCompiler.typerOptions); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	if !programCompiler.skipOptimizer {
-		if _, err := optimizer.Run(graph, programCompiler.optimizerOptions); err != nil {
-			return nil, nil, err
-		}
-
-		if !programCompiler.skipTyper {
-			if _, err := typer.Run(graph, programCompiler.typerOptions); err != nil {
-				return nil, nil, err
-			}
-		}
-	}
-
-	if !programCompiler.skipCodegen {
-		if _, err := codegen.AttachKernels(graph, programCompiler.codegenOptions); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	if err := validateGraphOps(graph, programCompiler.operationRegistry); err != nil {
-		return nil, nil, err
-	}
-
-	computeGraph, err := BuildDAGFromGraph(graph)
+	compiled, err := CompileGraph(lowered.AST, GraphCompileOptions{
+		OperationRegistry: programCompiler.operationRegistry,
+		TyperOptions:      programCompiler.typerOptions,
+		SkipTyper:         programCompiler.skipTyper,
+		OptimizerOptions:  programCompiler.optimizerOptions,
+		SkipOptimizer:     programCompiler.skipOptimizer,
+		CodegenOptions:    programCompiler.codegenOptions,
+		SkipCodegen:       programCompiler.skipCodegen,
+		WeightParser:      programCompiler.weightParser,
+		WeightMap:         programCompiler.weightMap,
+	})
 
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return graph, computeGraph, nil
+	return compiled.Graph, compiled.ComputeGraph, nil
 }
 
 func (programCompiler *ProgramCompiler) runPlanner(

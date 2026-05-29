@@ -1,0 +1,30 @@
+kind: Operation
+category: shape
+op: shape.cast
+name: Cast
+label: Cast
+description: Casts a tensor to a target dtype while preserving shape and element count.
+initial_width: 200
+inputs:
+  - name: x
+    type: tensor
+    description: Input tensor
+outputs:
+  - name: y
+    type: tensor
+    description: Cast tensor
+config:
+  - name: dtype
+    type: string
+    description: Target storage dtype
+  - name: from_dtype
+    type: string
+    description: Source storage dtype recorded by the typer adaptor
+bind:
+  method: shape.cast
+  output:
+    dtype: config.dtype
+    shape:
+      - ref: input.x.shape
+  args:
+    - ref: input.x

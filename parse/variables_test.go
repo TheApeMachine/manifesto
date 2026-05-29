@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/smartystreets/goconvey/convey"
+	"github.com/theapemachine/manifesto/ast"
 )
 
 func TestParserApplyVariables(testingObject *testing.T) {
@@ -89,17 +90,47 @@ func TestParserApplyVariablesDiffusionAsset(testingObject *testing.T) {
 			convey.So(program.State[0].Type, convey.ShouldEqual, "counter")
 			convey.So(program.Steps[3].Config["seed"], convey.ShouldEqual, 1337)
 			convey.So(program.Steps[4].Config["count"], convey.ShouldEqual, 4)
-			convey.So(program.Steps[5].Out["value"], convey.ShouldEqual, "state.timesteps")
-			convey.So(program.Steps[5].Out["loop"], convey.ShouldEqual, "timesteps")
-			convey.So(program.Steps[6].Op, convey.ShouldEqual, "control.loop_each")
-			convey.So(program.Steps[6].Loop.Over, convey.ShouldEqual, "timesteps")
-			convey.So(program.Steps[6].Loop.As, convey.ShouldEqual, "timestep")
-			convey.So(program.Steps[6].Body[0].In["hidden_states"], convey.ShouldEqual, "state.latents")
-			convey.So(program.Steps[6].Body[0].In["encoder_hidden_states"], convey.ShouldEqual, "state.text_embedding")
-			convey.So(program.Steps[6].Body[0].In["timestep"], convey.ShouldEqual, "timestep")
-			convey.So(program.Steps[8].Config["path"], convey.ShouldEqual, "flux-2-klein-4b.png")
-			convey.So(program.Steps[8].Config["width"], convey.ShouldEqual, 256)
-			convey.So(program.Steps[8].Config["height"], convey.ShouldEqual, 256)
+
+			timestepStep := findProgramStepByOp(program.Steps, "math.scalar_broadcast", "state.timesteps")
+			convey.So(timestepStep, convey.ShouldNotBeNil)
+			convey.So(timestepStep.Out["value"], convey.ShouldEqual, "state.timesteps")
+			convey.So(timestepStep.Out["loop"], convey.ShouldEqual, "timesteps")
+
+			loopStep := findProgramStepByOp(program.Steps, "control.loop_each", "")
+			convey.So(loopStep, convey.ShouldNotBeNil)
+			convey.So(loopStep.Loop.Over, convey.ShouldEqual, "timesteps")
+			convey.So(loopStep.Loop.As, convey.ShouldEqual, "timestep")
+			convey.So(loopStep.Body[0].In["hidden_states"], convey.ShouldEqual, "state.latents")
+			convey.So(loopStep.Body[0].In["encoder_hidden_states"], convey.ShouldEqual, "state.text_embedding")
+			convey.So(loopStep.Body[0].In["timestep"], convey.ShouldEqual, "timestep")
+
+			writeStep := findProgramStepByOp(program.Steps, "io.write_image", "")
+			convey.So(writeStep, convey.ShouldNotBeNil)
+			convey.So(writeStep.Config["path"], convey.ShouldEqual, "flux-2-klein-4b.png")
+			convey.So(writeStep.Config["width"], convey.ShouldEqual, 1024)
+			convey.So(writeStep.Config["height"], convey.ShouldEqual, 1024)
 		})
 	})
+}
+
+func findProgramStepByOp(steps []ast.Step, op string, outValue string) *ast.Step {
+	for index := range steps {
+		step := &steps[index]
+
+		if step.Op == op {
+			if outValue == "" {
+				return step
+			}
+
+			if step.Out["value"] == outValue {
+				return step
+			}
+		}
+
+		if nested := findProgramStepByOp(step.Body, op, outValue); nested != nil {
+			return nested
+		}
+	}
+
+	return nil
 }

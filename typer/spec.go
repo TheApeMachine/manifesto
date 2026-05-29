@@ -25,10 +25,8 @@ PortType templates the op accepts in order; Output is the PortType template
 the op produces. Both may reference symbolic dimensions which the typer
 binds against actual upstream types during inference.
 
-Spec lookups by Op string are intentionally a small Go table rather than
-a YAML-driven schema. The YAML schemas under template/operation/ are the
-long-term source of truth; the bridge from those to OpSpec is a separate
-pass and not on the critical path for this stage to be useful.
+Spec lookups consult specTable first, then fall back to the embedded
+operation registry for ops not listed in the hand-written table.
 */
 type OpSpec struct {
 	Inputs        []ir.PortType
@@ -258,7 +256,20 @@ when the op is not registered; callers can decide whether to default to
 a permissive "any tensor in, same out" rule or to fail the pass.
 */
 func LookupSpec(op string) (OpSpec, bool) {
-	spec, ok := specTable[strings.TrimSpace(op)]
+	op = strings.TrimSpace(op)
+
+	if spec, ok := specTable[op]; ok {
+		return spec, true
+	}
+
+	registrySpecsOnce.Do(loadRegistrySpecs)
+
+	if registrySpecsErr != nil {
+		return OpSpec{}, false
+	}
+
+	spec, ok := registrySpecs[op]
+
 	return spec, ok
 }
 

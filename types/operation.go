@@ -100,3 +100,16 @@ func (registry *OperationRegistry) Count() int {
 
 	return len(registry.schemas)
 }
+
+/*
+ForEach invokes fn for every registered operation schema.
+*/
+func (registry *OperationRegistry) ForEach(fn func(op Op, schema asset.Schema)) {
+	if registry == nil || fn == nil {
+		return
+	}
+
+	for op, schema := range registry.schemas {
+		fn(op, schema)
+	}
+}

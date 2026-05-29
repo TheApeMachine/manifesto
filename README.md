@@ -1,39 +1,40 @@
 # manifesto
 
-`github.com/theapemachine/manifesto` compiles Hugging Face model repositories and YAML runtime programs into manifest graph IR, compute IR, and bound weights.
-
-The **`compiler`** package (`import "github.com/theapemachine/manifesto/compiler"`) exposes `Compiler` as the compilation entry point; callers supply a recipe catalog and a Hugging Face Hub client.
+`github.com/theapemachine/manifesto` compiles YAML runtime programs and topology recipes into typed `ast.Graph` IR, scheduling DAGs, and planned workspace topologies.
 
 ## Compilation pipeline
 
-When you compile with a Hub repo attached, work flows through these stages:
+Program manifests and included topology blocks converge on one graph pipeline:
 
 ```mermaid
 flowchart LR
-  Hub[resolve.Hub] --> Resolve[resolve]
-  Catalog[catalog] --> Registry[registry]
-  Catalog --> Expand[expand]
-  Config[config.json] --> Expand
-  Registry --> Expand
-  Expand --> Lower[lower]
-  Lower --> AST[ast.Graph]
-  AST --> Weights[weights]
-  Weights --> IR[ir]
-  IR --> Compute[ir.Graph]
   YAML[program YAML] --> Parse[parse]
   Parse --> Program[ast.Program]
+  Program --> Include[include resolve]
+  Include --> Lower[lower topology]
+  Lower --> AST[ast.Graph]
+  AST --> Weights[weights.Binder]
+  Weights --> Typer[typer]
+  Typer --> Optimizer[optimizer]
+  Optimizer --> Typer2[typer re-run]
+  Typer2 --> Codegen[codegen]
+  Codegen --> Validate[closed-world validate]
+  Validate --> DAG[dag.Graph]
+  DAG --> Plan[ir.Topology planner]
 ```
 
-1. **resolve** — Discover `model_index.json`, per-component `config.json`, execution dtype, and SafeTensors paths.
-2. **registry** — Map the Hugging Face architecture class name to a catalog recipe.
-3. **expand** — Merge recipe `extends` chains, interpolate config variables, unroll repeats into a concrete topology.
-4. **lower** — Infer shapes and lower topology AST into manifest graph IR (`ast.Graph`).
-5. **weights** — Index and bind checkpoint tensors onto graph nodes via the recipe weight map.
-6. **ir** — Lower manifest graph IR into compute IR (`ir.Graph`) for kernel dispatch.
-
-Parsing a program manifest alone (no repo) stops after **parse** and returns `ast.Program` without model graphs.
+1. **parse** — Load program YAML (`ast.Program`), resolve `$variables.*`, expand includes.
+2. **lower** — Expand `repeat` templates and lower `ast.Topology` → `ast.Graph`.
+3. **weights** — Bind SafeTensors checkpoint names onto graph nodes (optional, when a `types.Parser` is supplied).
+4. **typer** — Hindley-Milner unification + adaptor synthesis (`shape.cast`, `shape.reshape`, `shape.transpose`).
+5. **optimizer** — Fusion and other graph rewrites.
+6. **codegen** — Attach CPU kernel metadata to fused nodes.
+7. **validate** — Closed-world check against `types.OperationRegistry`.
+8. **plan** — Static memory layout, I/O ports, stream scheduling → `ir.Topology`.
 
 ## Quick start
+
+### Runtime program compilation
 
 ```go
 import (
@@ -41,33 +42,44 @@ import (
 
     "github.com/theapemachine/manifesto/compiler"
     "github.com/theapemachine/manifesto/catalog"
-    "github.com/theapemachine/manifesto/resolve"
 )
 
-manifestCompiler, err := compiler.NewCompiler(compiler.Options{
-    Catalog: catalog.NewFS(yourRecipeFS),
-    Hub:     yourHubClient, // implements resolve.Hub
-})
+pool := compiler.NewPool(catalog.NewFS(asset.TemplateFS()))
+programCompiler, err := compiler.NewProgramCompiler(ctx, pool)
 if err != nil { /* ... */ }
 
-out, err := manifestCompiler.Compile(ctx, compiler.CompileInput{
+programCompiler = programCompiler.WithIncludeResolver(yourResolver)
+
+out, err := programCompiler.CompileAssets(ctx, compiler.CompileInput{
     ProgramYAML: programBytes,
-    Repo: resolve.RepoLocation{
-        RepoID:   "org/model",
-        Revision: "main",
-    },
-    CacheDir: "/tmp/hf-cache",
-})
-// out.Program, out.Model, out.Graphs, out.ComputeGraphs
+}, assetFS)
+// out.Program, out.Graphs, out.ComputeGraphs, out.Workspaces
 ```
 
-`resolve.Hub` is host-provided (HTTP, local cache, tests). `catalog.Catalog` is typically an `io/fs.FS` of recipe YAML under `model/architecture/`.
+`WithWeightParser` binds checkpoint tensors before typing. `WithPlannerBindings` supplies runtime symbol values (`N`, batch caps) for workspace sizing.
+
+### Checkpoint topology compilation
+
+```go
+checkpointCompiler, err := compiler.NewCompiler(ctx, pool, safetensorsParser)
+if err != nil { /* ... */ }
+
+checkpointCompiler = checkpointCompiler.WithTopology(topologyRecipe)
+
+compiled, err := checkpointCompiler.CompileTopology()
+// compiled.Graph, compiled.ComputeGraph
+
+project, err := checkpointCompiler.Build()
+// ir.Project with per-node weights for legacy planners
+```
+
+`CompileTopology` runs the same `CompileGraph` pipeline as `ProgramCompiler`. `Build` remains the weight-indexing path into `ir.Project`.
 
 ## Sub-packages
 
 ### [`compiler`](./compiler/)
 
-Orchestrates the pipeline above. Types: `Compiler`, `CompileInput`, `CompileOutput`. Include expansion and asset graph compilation live in `includes.go` and `assets.go`.
+Orchestrates the pipeline above. Primary types: `ProgramCompiler`, `CompileInput`, `CompileOutput`, `CompileGraph`, `CompiledGraph`. Legacy checkpoint binding: `Compiler`, `Build`, `CompileTopology`.
 
 ### [`ast`](./ast/)
 
