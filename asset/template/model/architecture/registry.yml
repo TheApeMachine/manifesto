@@ -6,7 +6,7 @@ architectures:
     include: model.diffusion.flux-2-klein-4b-text-encoder
 
   Flux2Transformer2DModel:
-    include: model.architecture.flux2
+    include: loader/architecture/Flux2Transformer2DModel.yml
     variables:
       in_channels: { config: in_channels }
       hidden_size:

@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/theapemachine/manifesto/optimizer"
@@ -85,16 +84,17 @@ func (kernel *CPUKernel) Run(inputs [][]float32, output []float32, count int) er
 	}
 
 	for elementIndex := 0; elementIndex < count; elementIndex++ {
-		output[elementIndex] = evalCPU(kernel.root, inputs, elementIndex)
+		output[elementIndex] = EvalScalarReference(kernel.root, inputs, elementIndex)
 	}
 
 	return nil
 }
 
 /*
-EmitCPU lowers one FusionAST into a CPUKernel.
+EmitReferenceCPU lowers one FusionAST into the scalar reference evaluator.
+Parity tests compare JIT output against this path.
 */
-func EmitCPU(fusion *optimizer.FusionAST) (*CPUKernel, error) {
+func EmitReferenceCPU(fusion *optimizer.FusionAST) (*CPUKernel, error) {
 	if fusion == nil {
 		return nil, fmt.Errorf("codegen cpu: fusion is required")
 	}
@@ -117,98 +117,7 @@ func EmitCPU(fusion *optimizer.FusionAST) (*CPUKernel, error) {
 	}, nil
 }
 
-/*
-evalCPU evaluates one ASTNode at element index. Operates on float32 inputs;
-intermediate math is done at float32 precision since manifesto's
-default execution dtype is bf16/f16 with f32 accumulators and the kernel
-sees the post-adaptor f32 values.
-*/
-func evalCPU(node *optimizer.ASTNode, inputs [][]float32, elementIndex int) float32 {
-	switch node.Type {
-	case optimizer.NodeInput:
-		return inputs[node.InputIndex][elementIndex]
-	case optimizer.NodeConstant:
-		return float32(node.Value)
-	case optimizer.NodeAdd:
-		return evalCPU(node.Children[0], inputs, elementIndex) +
-			evalCPU(node.Children[1], inputs, elementIndex)
-	case optimizer.NodeSub:
-		return evalCPU(node.Children[0], inputs, elementIndex) -
-			evalCPU(node.Children[1], inputs, elementIndex)
-	case optimizer.NodeMul:
-		return evalCPU(node.Children[0], inputs, elementIndex) *
-			evalCPU(node.Children[1], inputs, elementIndex)
-	case optimizer.NodeDiv:
-		return evalCPU(node.Children[0], inputs, elementIndex) /
-			evalCPU(node.Children[1], inputs, elementIndex)
-	case optimizer.NodeMax:
-		left := evalCPU(node.Children[0], inputs, elementIndex)
-		right := evalCPU(node.Children[1], inputs, elementIndex)
-
-		if left > right {
-			return left
-		}
-
-		return right
-	case optimizer.NodeMin:
-		left := evalCPU(node.Children[0], inputs, elementIndex)
-		right := evalCPU(node.Children[1], inputs, elementIndex)
-
-		if left < right {
-			return left
-		}
-
-		return right
-	case optimizer.NodeNeg:
-		return -evalCPU(node.Children[0], inputs, elementIndex)
-	case optimizer.NodeAbs:
-		value := evalCPU(node.Children[0], inputs, elementIndex)
-
-		if value < 0 {
-			return -value
-		}
-
-		return value
-	case optimizer.NodeSqrt:
-		return float32(math.Sqrt(float64(evalCPU(node.Children[0], inputs, elementIndex))))
-	case optimizer.NodeExp:
-		return float32(math.Exp(float64(evalCPU(node.Children[0], inputs, elementIndex))))
-	case optimizer.NodeLog:
-		return float32(math.Log(float64(evalCPU(node.Children[0], inputs, elementIndex))))
-	case optimizer.NodeReLU:
-		value := evalCPU(node.Children[0], inputs, elementIndex)
-
-		if value < 0 {
-			return 0
-		}
-
-		return value
-	case optimizer.NodeSigmoid:
-		value := evalCPU(node.Children[0], inputs, elementIndex)
-
-		return float32(1.0 / (1.0 + math.Exp(-float64(value))))
-	case optimizer.NodeTanh:
-		return float32(math.Tanh(float64(evalCPU(node.Children[0], inputs, elementIndex))))
-	case optimizer.NodeSilu:
-		value := evalCPU(node.Children[0], inputs, elementIndex)
-
-		return float32(float64(value) / (1.0 + math.Exp(-float64(value))))
-	case optimizer.NodeGelu:
-		value := float64(evalCPU(node.Children[0], inputs, elementIndex))
-		inner := math.Sqrt(2.0/math.Pi) * (value + 0.044715*value*value*value)
-
-		return float32(0.5 * value * (1.0 + math.Tanh(inner)))
-	case optimizer.NodeLeakyReLU:
-		value := evalCPU(node.Children[0], inputs, elementIndex)
-
-		if value >= 0 {
-			return value
-		}
-
-		return 0.01 * value
-	default:
-		return 0
-	}
-}
-
-var _ Kernel = (*CPUKernel)(nil)
+var (
+	_ Kernel            = (*CPUKernel)(nil)
+	_ ElementwiseRunner = (*CPUKernel)(nil)
+)

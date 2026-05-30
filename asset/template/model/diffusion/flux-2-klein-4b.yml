@@ -61,7 +61,7 @@ system:
   # Topology is sourced from a parameterised architecture manifest so
   # the same wiring can be reused for any FLUX-2-shaped checkpoint by
   # changing the dimensions here. The included file lives at
-  # pkg/asset/template/model/architecture/flux2.yml and contains only
+  # pkg/asset/template/loader/architecture/Flux2Transformer2DModel.yml and contains only
   # primitive ops + repeat blocks — no Go-side architecture knowledge.
   topology:
     from_safetensors:

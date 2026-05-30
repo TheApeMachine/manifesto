@@ -28,7 +28,7 @@ flowchart LR
 3. **weights** — Bind SafeTensors checkpoint names onto graph nodes (optional, when a `types.Parser` is supplied).
 4. **typer** — Hindley-Milner unification + adaptor synthesis (`shape.cast`, `shape.reshape`, `shape.transpose`).
 5. **optimizer** — Fusion and other graph rewrites.
-6. **codegen** — Attach CPU kernel metadata to fused nodes.
+6. **codegen** — Attach CPU kernel metadata to fused nodes (scalar reference by default; LLVM MCJIT when built with `-tags=codegen_llvm`).
 7. **validate** — Closed-world check against `types.OperationRegistry`.
 8. **plan** — Static memory layout, I/O ports, stream scheduling → `ir.Topology`.
 
@@ -140,6 +140,27 @@ Canonical numeric formats for the platform: `DType` enum, scalars, `Float16`, `B
 ### [`dtype/convert`](./dtype/convert/)
 
 Scalar correctness paths for converting between dtypes (used before device upload when a backend does not accept a source dtype natively).
+
+### [`codegen`](./codegen/)
+
+Lowers `optimizer.FusionAST` clusters to execution kernels:
+
+- **`EmitReferenceCPU`** — scalar float32 reference evaluator (`CPUKernel`); parity baseline for all backends.
+- **`EmitMetal`** — MSL source generator (`codegen/metal.EmitMSL`).
+- **`EmitMetalRunner`** — Darwin: MSL → `MTLLibrary` → parity-tested GPU kernel (`make test-metal`).
+- **`codegen/llvm`** — FusionAST → llir IR → LLVM MCJIT (requires system LLVM; build tag `codegen_llvm`). Vectorizable fusions (arithmetic + ReLU/LeakyReLU) lower to explicit `<N x float>` vector loops with a scalar tail; transcendentals stay scalar.
+
+```bash
+# Default tests (no LLVM dependency)
+go test ./codegen/...
+
+# LLVM MCJIT parity (Homebrew: brew install llvm)
+make test-jit
+# or: LLVM_CONFIG=/opt/homebrew/opt/llvm/bin/llvm-config make test-jit
+
+# MTLLibrary fusion parity (Darwin + Metal GPU)
+make test-metal
+```
 
 ### [`tensor`](./tensor/)
 

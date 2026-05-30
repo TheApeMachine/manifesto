@@ -34,7 +34,8 @@ backend picks the matching kernel for the active device.
 type Target int
 
 const (
-	// TargetCPU is the in-process Go evaluator (no LLVM yet).
+	// TargetCPU is the host CPU kernel (scalar reference by default; LLVM
+	// MCJIT when built with -tags=codegen_llvm).
 	TargetCPU Target = iota
 	// TargetMetal is MSL source intended for compilation by
 	// puter/device/metal at session init.
@@ -85,7 +86,7 @@ func EmitFusion(fusion *optimizer.FusionAST, options EmitOptions) ([]Kernel, err
 
 			kernels = append(kernels, kernel)
 		case TargetMetal:
-			kernel, err := EmitMetal(fusion)
+			kernel, err := emitMetalKernel(fusion)
 
 			if err != nil {
 				return nil, err

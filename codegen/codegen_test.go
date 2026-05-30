@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/smartystreets/goconvey/convey"
@@ -29,7 +28,7 @@ func TestEmitCPURunsFusedChain(t *testing.T) {
 			},
 		}
 
-		kernel, err := EmitCPU(fusion)
+		kernel, err := EmitReferenceCPU(fusion)
 
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(kernel.Target(), convey.ShouldEqual, TargetCPU)
@@ -76,7 +75,7 @@ func TestEmitCPUEvaluatesActivations(t *testing.T) {
 		output := make([]float32, 4)
 
 		convey.Convey("Sigmoid matches the float64 reference", func() {
-			kernel, err := EmitCPU(fusion(optimizer.NodeSigmoid))
+			kernel, err := EmitReferenceCPU(fusion(optimizer.NodeSigmoid))
 			convey.So(err, convey.ShouldBeNil)
 			err = kernel.Run(inputs, output, 4)
 			convey.So(err, convey.ShouldBeNil)
@@ -88,7 +87,7 @@ func TestEmitCPUEvaluatesActivations(t *testing.T) {
 		})
 
 		convey.Convey("Tanh matches the math.Tanh reference", func() {
-			kernel, err := EmitCPU(fusion(optimizer.NodeTanh))
+			kernel, err := EmitReferenceCPU(fusion(optimizer.NodeTanh))
 			convey.So(err, convey.ShouldBeNil)
 			err = kernel.Run(inputs, output, 4)
 			convey.So(err, convey.ShouldBeNil)
@@ -186,13 +185,13 @@ func TestAttachKernelsToGraph(t *testing.T) {
 			convey.So(cpu, convey.ShouldNotBeNil)
 			convey.So(metal, convey.ShouldNotBeNil)
 
-			cpuKernel, ok := cpu.(*CPUKernel)
+			cpuRunner, ok := cpu.(ElementwiseRunner)
 			convey.So(ok, convey.ShouldBeTrue)
-			convey.So(cpuKernel.Output(), convey.ShouldEqual, "y")
+			convey.So(cpuRunner.Output(), convey.ShouldEqual, "y")
 
-			metalKernel, ok := metal.(*MetalKernel)
+			metalKernel, ok := metal.(ElementwiseRunner)
 			convey.So(ok, convey.ShouldBeTrue)
-			convey.So(strings.Contains(metalKernel.Source(), "fmax(0.0f"), convey.ShouldBeTrue)
+			convey.So(metalKernel.Output(), convey.ShouldEqual, "y")
 		})
 	})
 }
