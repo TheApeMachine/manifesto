@@ -229,6 +229,30 @@ var specTable = map[string]OpSpec{
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},
 
+	"resonant.update_forward": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),
+	},
+	"resonant.update_backward": {
+		Inputs: []ir.PortType{
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+			anyTensor(),
+		},
+		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),
+	},
+
 	"value.assign": {
 		Inputs:        []ir.PortType{anyTensor()},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),

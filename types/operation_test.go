@@ -23,6 +23,14 @@ func TestOpBindMethodResolvesSchema(t *testing.T) {
 			method, err = Op("math.rmsnorm").BindMethod(registry)
 			convey.So(err, convey.ShouldBeNil)
 			convey.So(method, convey.ShouldEqual, "RMSNorm")
+
+			method, err = Op("resonant.update_forward").BindMethod(registry)
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(method, convey.ShouldEqual, "ResonantUpdateForward")
+
+			method, err = Op("resonant.update_backward").BindMethod(registry)
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(method, convey.ShouldEqual, "ResonantUpdateBackward")
 		})
 	})
 }

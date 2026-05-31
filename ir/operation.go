@@ -157,4 +157,6 @@ const (
 	OperationDequant
 	OperationDequant4
 	OperationQuant
+	OperationResonantUpdateForward
+	OperationResonantUpdateBackward
 )

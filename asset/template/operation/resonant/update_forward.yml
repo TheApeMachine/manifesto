@@ -1,0 +1,84 @@
+kind: Operation
+category: resonant
+op: resonant.update_forward
+name: Resonant Update Forward
+label: Resonant Update Forward
+description: Applies the coupled phasor update on (batch_time, head_count, head_dim) tensors.
+initial_width: 260
+inputs:
+  - name: x
+    type: tensor
+    description: Phasor real state [BT, H, D]
+  - name: y
+    type: tensor
+    description: Phasor imag state [BT, H, D]
+  - name: vr
+    type: tensor
+    description: Coupling real field [BT, H, D]
+  - name: vi
+    type: tensor
+    description: Coupling imag field [BT, H, D]
+  - name: diag
+    type: tensor
+    description: Head coupling diagonal [H, D]
+outputs:
+  - name: x_out
+    type: tensor
+    description: Normalized phasor real [BT, H, D]
+  - name: y_out
+    type: tensor
+    description: Normalized phasor imag [BT, H, D]
+  - name: a_out
+    type: tensor
+    description: Pre-normalize real accumulator [BT, H, D]
+  - name: b_out
+    type: tensor
+    description: Pre-normalize imag accumulator [BT, H, D]
+  - name: inv_r_out
+    type: tensor
+    description: Inverse radius [BT, H, D]
+config:
+  - name: scale
+    type: float
+    default: 0.25
+    description: Coupling scale
+  - name: damping
+    type: float
+    default: 0.1
+    description: State damping factor
+  - name: zero_diag
+    type: bool
+    default: true
+    description: Subtract diagonal self-coupling before scaling
+bind:
+  method: ResonantUpdateForward
+  config_struct: ResonantUpdateConfig
+  config_fields:
+    Scale:
+      ref: config.scale.float
+    Damping:
+      ref: config.damping.float
+    ZeroDiag:
+      ref: config.zero_diag.bool
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.x.pointer
+    - ref: input.y.pointer
+    - ref: input.vr.pointer
+    - ref: input.vi.pointer
+    - ref: input.diag.pointer
+    - ref: output.x_out.pointer
+    - ref: output.y_out.pointer
+    - ref: output.a_out.pointer
+    - ref: output.b_out.pointer
+    - ref: output.inv_r_out.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: 1
+    - ref: input.x.shape
+      dim: 2
+    - ref: input.x.dtype

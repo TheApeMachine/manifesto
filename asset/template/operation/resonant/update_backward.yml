@@ -1,0 +1,92 @@
+kind: Operation
+category: resonant
+op: resonant.update_backward
+name: Resonant Update Backward
+label: Resonant Update Backward
+description: Reverse-mode gradients for resonant.update_forward.
+initial_width: 280
+inputs:
+  - name: grad_x_out
+    type: tensor
+    description: Upstream grad w.r.t. normalized x [BT, H, D]
+  - name: grad_y_out
+    type: tensor
+    description: Upstream grad w.r.t. normalized y [BT, H, D]
+  - name: x
+    type: tensor
+    description: Forward input real state [BT, H, D]
+  - name: y
+    type: tensor
+    description: Forward input imag state [BT, H, D]
+  - name: diag
+    type: tensor
+    description: Head coupling diagonal [H, D]
+  - name: a
+    type: tensor
+    description: Forward pre-normalize real [BT, H, D]
+  - name: b
+    type: tensor
+    description: Forward pre-normalize imag [BT, H, D]
+  - name: inv_r
+    type: tensor
+    description: Forward inverse radius [BT, H, D]
+outputs:
+  - name: grad_x
+    type: tensor
+    description: Grad w.r.t. x [BT, H, D]
+  - name: grad_y
+    type: tensor
+    description: Grad w.r.t. y [BT, H, D]
+  - name: grad_vr
+    type: tensor
+    description: Grad w.r.t. vr [BT, H, D]
+  - name: grad_vi
+    type: tensor
+    description: Grad w.r.t. vi [BT, H, D]
+config:
+  - name: scale
+    type: float
+    default: 0.25
+    description: Coupling scale
+  - name: damping
+    type: float
+    default: 0.1
+    description: State damping factor
+  - name: zero_diag
+    type: bool
+    default: false
+    description: Subtract diagonal self-coupling before scaling
+bind:
+  method: ResonantUpdateBackward
+  config_struct: ResonantUpdateConfig
+  config_fields:
+    Scale:
+      ref: config.scale.float
+    Damping:
+      ref: config.damping.float
+    ZeroDiag:
+      ref: config.zero_diag.bool
+  output:
+    shape:
+      - ref: input.x.shape
+    dtype: input.x.dtype
+  args:
+    - ref: input.grad_x_out.pointer
+    - ref: input.grad_y_out.pointer
+    - ref: input.x.pointer
+    - ref: input.y.pointer
+    - ref: input.diag.pointer
+    - ref: input.a.pointer
+    - ref: input.b.pointer
+    - ref: input.inv_r.pointer
+    - ref: output.grad_x.pointer
+    - ref: output.grad_y.pointer
+    - ref: output.grad_vr.pointer
+    - ref: output.grad_vi.pointer
+    - ref: input.x.shape
+      dim: 0
+    - ref: input.x.shape
+      dim: 1
+    - ref: input.x.shape
+      dim: 2
+    - ref: input.x.dtype
