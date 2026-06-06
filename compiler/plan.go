@@ -107,7 +107,7 @@ func newPlanningNode(node *ast.GraphNode, registry *types.OperationRegistry) (*i
 		return irNode, nil
 	}
 
-	bindMethod, err := op.BindMethod(registry)
+	bindMethod, err := op.BindMethodForInputCount(registry, len(node.Inputs))
 
 	if err != nil {
 		return nil, err

@@ -25,8 +25,17 @@ func (op Op) String() string {
 /*
 BindMethod returns the device.Backend method name from the operation
 schema's bind.method field (e.g. "Gelu", "Matmul", "RMSNorm").
+Ops with bind.variants require BindMethodForInputCount instead.
 */
 func (op Op) BindMethod(registry *OperationRegistry) (string, error) {
+	return op.BindMethodForInputCount(registry, 0)
+}
+
+/*
+BindMethodForInputCount resolves bind.method or the matching bind.variants
+entry for one concrete input arity.
+*/
+func (op Op) BindMethodForInputCount(registry *OperationRegistry, inputCount int) (string, error) {
 	if registry == nil {
 		return "", fmt.Errorf("operation %q: registry is required", op)
 	}
@@ -37,11 +46,69 @@ func (op Op) BindMethod(registry *OperationRegistry) (string, error) {
 		return "", fmt.Errorf("operation %q: no schema registered", op)
 	}
 
-	if schema.Bind == nil || schema.Bind.Method == "" {
+	if schema.Bind == nil {
 		return "", fmt.Errorf("operation %q: bind.method is required", op)
 	}
 
-	return schema.Bind.Method, nil
+	method, err := resolveBindMethod(schema.Bind, inputCount)
+
+	if err != nil {
+		return "", fmt.Errorf("operation %q: %w", op, err)
+	}
+
+	return method, nil
+}
+
+func resolveBindMethod(bind *asset.Bind, inputCount int) (string, error) {
+	if bind == nil {
+		return "", fmt.Errorf("bind is required")
+	}
+
+	for _, variant := range bind.Variants {
+		if variant.When.InputCount == 0 {
+			continue
+		}
+
+		if variant.When.InputCount != inputCount {
+			continue
+		}
+
+		if strings.TrimSpace(variant.Method) == "" {
+			return "", fmt.Errorf("bind variant for %d input(s) has no method", inputCount)
+		}
+
+		return variant.Method, nil
+	}
+
+	if strings.TrimSpace(bind.Method) != "" {
+		return bind.Method, nil
+	}
+
+	if len(bind.Variants) > 0 {
+		return "", fmt.Errorf("no bind variant for %d input(s)", inputCount)
+	}
+
+	return "", fmt.Errorf("bind.method is required")
+}
+
+/*
+HasBind reports whether an operation schema resolves to a backend method
+for the given input count.
+*/
+func (registry *OperationRegistry) HasBind(op Op, inputCount int) bool {
+	if registry == nil {
+		return false
+	}
+
+	schema, ok := registry.Lookup(op)
+
+	if !ok || schema.Bind == nil {
+		return false
+	}
+
+	_, err := resolveBindMethod(schema.Bind, inputCount)
+
+	return err == nil
 }
 
 /*

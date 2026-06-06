@@ -53,11 +53,16 @@ func validateOneGraphOp(node *ast.GraphNode, registry *types.OperationRegistry) 
 		return nil
 	}
 
-	schema, inRegistry := registry.Lookup(types.Op(op))
+	_, inRegistry := registry.Lookup(types.Op(op))
 
 	if inRegistry {
-		if schema.Bind == nil || strings.TrimSpace(schema.Bind.Method) == "" {
-			return fmt.Errorf("compiler: node %q: operation %q has no bind.method", node.ID, op)
+		inputCount := len(node.Inputs)
+
+		if !registry.HasBind(types.Op(op), inputCount) {
+			return fmt.Errorf(
+				"compiler: node %q: operation %q has no bind.method for %d input(s)",
+				node.ID, op, inputCount,
+			)
 		}
 
 		return nil

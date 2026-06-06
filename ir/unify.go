@@ -3,6 +3,8 @@ package ir
 import (
 	"fmt"
 	"strings"
+
+	"github.com/theapemachine/manifesto/dtype"
 )
 
 /*
@@ -90,7 +92,7 @@ func Unify(producer, consumer PortType) (UnificationResult, error) {
 	}
 
 	result.Unified = PortType{
-		DType:       producer.DType,
+		DType:       unifiedDType(producer, consumer),
 		ShapeSchema: unifiedShape,
 		Layout:      unifiedLayout,
 		Kind:        unifiedKind,
@@ -133,10 +135,26 @@ func unifyDType(producer, consumer PortType) error {
 		return nil
 	}
 
+	if producer.DType == dtype.Invalid || consumer.DType == dtype.Invalid {
+		return nil
+	}
+
 	return newErrorWithHint(
 		fmt.Sprintf("dtype mismatch: producer %s vs consumer %s", producer.DType, consumer.DType),
 		"cast",
 	)
+}
+
+func unifiedDType(producer, consumer PortType) dtype.DType {
+	if producer.DType != dtype.Invalid {
+		return producer.DType
+	}
+
+	if consumer.DType != dtype.Invalid {
+		return consumer.DType
+	}
+
+	return dtype.Float32
 }
 
 func unifyLayout(producer, consumer LayoutSchema) (LayoutSchema, error) {

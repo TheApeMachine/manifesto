@@ -163,7 +163,7 @@ func (compiler *Compiler) buildNode(
 		return nil, fmt.Errorf("compiler: node %q: op is required", topologyNode.ID)
 	}
 
-	bindMethod, err := op.BindMethod(compiler.registry)
+	bindMethod, err := op.BindMethodForInputCount(compiler.registry, len(topologyNode.In))
 
 	if err != nil {
 		return nil, fmt.Errorf("compiler: node %q: %w", topologyNode.ID, err)

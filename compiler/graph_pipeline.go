@@ -5,6 +5,7 @@ import (
 
 	"github.com/theapemachine/manifesto/ast"
 	"github.com/theapemachine/manifesto/codegen"
+	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/ir/dag"
 	"github.com/theapemachine/manifesto/optimizer"
 	"github.com/theapemachine/manifesto/typer"
@@ -56,6 +57,8 @@ func CompileGraph(graph *ast.Graph, options GraphCompileOptions) (*CompiledGraph
 		if _, err := binder.Bind(graph, options.WeightParser, options.WeightMap); err != nil {
 			return nil, fmt.Errorf("compiler: bind weights: %w", err)
 		}
+
+		graph.ApplyExecutionDType(executionDTypeFromGraph(graph))
 	}
 
 	if !options.SkipTyper {
@@ -96,4 +99,22 @@ func CompileGraph(graph *ast.Graph, options GraphCompileOptions) (*CompiledGraph
 		Graph:        graph,
 		ComputeGraph: computeGraph,
 	}, nil
+}
+
+func executionDTypeFromGraph(graph *ast.Graph) dtype.DType {
+	if graph == nil {
+		return dtype.Float32
+	}
+
+	for _, node := range graph.Nodes {
+		if node == nil || node.Weights == nil {
+			continue
+		}
+
+		if node.Weights.DType.IsFloat() {
+			return node.Weights.DType
+		}
+	}
+
+	return dtype.Float32
 }

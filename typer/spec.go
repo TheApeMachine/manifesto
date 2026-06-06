@@ -78,7 +78,7 @@ var specTable = map[string]OpSpec{
 	},
 	"math.rmsnorm": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D"), Layout: ir.LayoutContiguous},
@@ -87,7 +87,7 @@ var specTable = map[string]OpSpec{
 	},
 	"math.layernorm": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D"), Layout: ir.LayoutContiguous},
@@ -127,7 +127,7 @@ var specTable = map[string]OpSpec{
 	},
 	"projection.linear": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
 		},
 		WeightTypes: []ir.PortType{
 			{DType: dtype.Float32, ShapeSchema: shapeSymbols("D_in", "D_out"), Layout: ir.LayoutContiguous},
@@ -136,8 +136,8 @@ var specTable = map[string]OpSpec{
 	},
 	"math.matmul": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("M", "K"), Layout: ir.LayoutContiguous},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("K", "N"), Layout: ir.LayoutContiguous},
+			{DType: dtype.Invalid, ShapeSchema: shapeSymbols("M", "K"), Layout: ir.LayoutContiguous},
+			{DType: dtype.Invalid, ShapeSchema: shapeSymbols("K", "N"), Layout: ir.LayoutContiguous},
 		},
 		OutputDeriver: deriveMatmulOutput,
 	},
@@ -159,8 +159,8 @@ var specTable = map[string]OpSpec{
 	"activation.swish":   unaryElementwiseSpec(),
 	"activation.swiglu": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
+			activationTensor(),
+			activationTensor(),
 		},
 		OutputDeriver: deriveSwiGLUOutput,
 	},
@@ -191,7 +191,7 @@ var specTable = map[string]OpSpec{
 	},
 	"positional.rope": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
 			{DType: dtype.Int32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticGeneric},
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
@@ -218,9 +218,9 @@ var specTable = map[string]OpSpec{
 	},
 	"attention.gqa": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("KV"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
+			{DType: dtype.Invalid, ShapeSchema: shapeSymbols("KV", "KVH", "HD"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			{DType: dtype.Invalid, ShapeSchema: shapeSymbols("KV", "KVH", "HD"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},
@@ -318,17 +318,26 @@ func shapeSymbols(symbols ...string) ir.ShapeSchema {
 
 func anyTensor() ir.PortType {
 	return ir.PortType{
-		DType:       dtype.Float32,
+		DType:       dtype.Invalid,
 		ShapeSchema: shapeSymbols("N"),
 		Layout:      ir.LayoutUnspecified,
 		Kind:        ir.SemanticGeneric,
 	}
 }
 
+func activationTensor() ir.PortType {
+	return ir.PortType{
+		DType:       dtype.Invalid,
+		ShapeSchema: shapeSymbols("N"),
+		Layout:      ir.LayoutContiguous,
+		Kind:        ir.SemanticHiddenState,
+	}
+}
+
 func unaryElementwiseSpec() OpSpec {
 	return OpSpec{
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
+			activationTensor(),
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),
 	}
@@ -337,8 +346,8 @@ func unaryElementwiseSpec() OpSpec {
 func binaryElementwiseSpec() OpSpec {
 	return OpSpec{
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous},
+			activationTensor(),
+			activationTensor(),
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticGeneric),
 	}

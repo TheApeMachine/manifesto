@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/theapemachine/manifesto/asset"
 	"github.com/theapemachine/manifesto/catalog"
@@ -29,6 +30,8 @@ type Orchestrator struct {
 	stdin           io.Reader
 	initialValues   map[string]any
 	includeResolver compiler.IncludeResolver
+	weightParser    types.Parser
+	weightMap       map[string]string
 	typerOptions    typer.Options
 	typerConfigured bool
 	plannerBindings ir.SymbolMap
@@ -47,6 +50,13 @@ type OrchestratorOptions struct {
 	Stdin           io.Reader
 	InitialValues   map[string]any
 	IncludeResolver compiler.IncludeResolver
+
+	// WeightParser, when set, binds safetensors checkpoint metadata onto
+	// lowered graphs before the typer pass. WeightMap maps graph node IDs
+	// to explicit checkpoint tensor names when the default binding rule
+	// does not apply.
+	WeightParser types.Parser
+	WeightMap    map[string]string
 
 	// TyperOptions overrides the typer pipeline configuration applied to
 	// every lowered topology. Leave the zero value to use the typer's
@@ -106,6 +116,8 @@ func NewOrchestrator(options OrchestratorOptions) (*Orchestrator, error) {
 		stdin:           stdin,
 		initialValues:   options.InitialValues,
 		includeResolver: options.IncludeResolver,
+		weightParser:    options.WeightParser,
+		weightMap:       options.WeightMap,
 		typerOptions:    options.TyperOptions,
 		typerConfigured: options.ConfigureTyper,
 		plannerBindings: options.PlannerBindings,
@@ -116,7 +128,7 @@ func NewOrchestrator(options OrchestratorOptions) (*Orchestrator, error) {
 Run loads, compiles, and executes one program manifest path.
 */
 func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) error {
-	programYAML, err := asset.ReadFile(programPath)
+	programYAML, err := readProgramYAML(programPath)
 
 	if err != nil {
 		return fmt.Errorf("runtime orchestrator: read program %q: %w", programPath, err)
@@ -141,6 +153,13 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 
 	if len(orchestrator.plannerBindings) > 0 {
 		manifestCompiler = manifestCompiler.WithPlannerBindings(orchestrator.plannerBindings)
+	}
+
+	if orchestrator.weightParser != nil {
+		manifestCompiler = manifestCompiler.WithWeightParser(
+			orchestrator.weightParser,
+			orchestrator.weightMap,
+		)
 	}
 
 	output, err := manifestCompiler.CompileAssets(ctx, compiler.CompileInput{
@@ -175,6 +194,22 @@ func (orchestrator *Orchestrator) Run(ctx context.Context, programPath string) e
 	}
 
 	return nil
+}
+
+func readProgramYAML(programPath string) ([]byte, error) {
+	if programPath == "" {
+		return nil, fmt.Errorf("program path is required")
+	}
+
+	if filepath.IsAbs(programPath) {
+		return os.ReadFile(programPath)
+	}
+
+	if _, err := os.Stat(programPath); err == nil {
+		return os.ReadFile(programPath)
+	}
+
+	return asset.ReadFile(programPath)
 }
 
 /*

@@ -53,7 +53,7 @@ func deriveEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bindings i
 	}
 
 	return ir.PortType{
-		DType: dtype.Float32,
+		DType: boundWeightDType(node),
 		ShapeSchema: ir.ShapeSchema{
 			Dimensions: append(append([]ir.Dimension(nil), tokenDim...), hiddenDim),
 		},
@@ -206,7 +206,7 @@ func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 	prefix := append([]ir.Dimension(nil), leading[:len(leading)-1]...)
 
 	return ir.PortType{
-		DType:       dtype.Float32,
+		DType:       inputs[0].DType,
 		ShapeSchema: ir.ShapeSchema{Dimensions: append(prefix, ir.Dimension{Static: outFeatures})},
 		Layout:      ir.LayoutContiguous,
 		Kind:        ir.SemanticHiddenState,

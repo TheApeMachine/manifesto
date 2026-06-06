@@ -846,18 +846,24 @@ func TestInferDerivesBatchedLastTokenOutputShape(t *testing.T) {
 }
 
 func TestInferSurfacesCastHintForDTypeMismatch(t *testing.T) {
-	convey.Convey("Given an embedding.token op fed by a default Float32 graph input", t, func() {
-		// Graph inputs default to anyTensor() (Float32). embedding.token's
-		// spec demands an Int32 TokenIndex input. The typer should surface
-		// a cast hint on that edge so the synthesis pass can insert a
-		// shape.cast.
+	convey.Convey("Given a Float32 producer feeding an embedding.token op that expects Int32 ids", t, func() {
 		graph := &ast.Graph{
-			Inputs: []string{"x"},
 			Nodes: []*ast.GraphNode{
+				{
+					ID:     "source",
+					Op:     "math.add",
+					Inputs: []string{"left", "right"},
+					OutputType: ir.PortType{
+						DType:       dtype.Float32,
+						ShapeSchema: shapeSymbols("N"),
+						Layout:      ir.LayoutContiguous,
+						Kind:        ir.SemanticGeneric,
+					},
+				},
 				{
 					ID:      "embed",
 					Op:      "embedding.token",
-					Inputs:  []string{"x"},
+					Inputs:  []string{"source"},
 					Weights: &ast.BoundWeight{TensorName: "table"},
 				},
 			},
@@ -868,7 +874,7 @@ func TestInferSurfacesCastHintForDTypeMismatch(t *testing.T) {
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(len(edgeErrors), convey.ShouldEqual, 1)
 		convey.So(edgeErrors[0].AdaptorHint, convey.ShouldEqual, "cast")
-		convey.So(edgeErrors[0].Producer, convey.ShouldEqual, "x")
+		convey.So(edgeErrors[0].Producer, convey.ShouldEqual, "source")
 		convey.So(edgeErrors[0].Consumer, convey.ShouldEqual, "embed")
 		convey.So(edgeErrors[0].ConsumerSlot, convey.ShouldEqual, 0)
 	})

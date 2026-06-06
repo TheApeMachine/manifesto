@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/theapemachine/manifesto/ast"
+	"github.com/theapemachine/manifesto/dtype"
 	"github.com/theapemachine/manifesto/ir"
 )
 
@@ -47,6 +48,14 @@ func boundWeightDim(node *ast.GraphNode, index int) int64 {
 	}
 
 	return node.Weights.Shape[index]
+}
+
+func boundWeightDType(node *ast.GraphNode) dtype.DType {
+	if node == nil || node.Weights == nil || node.Weights.DType == dtype.Invalid {
+		return dtype.Float32
+	}
+
+	return node.Weights.DType
 }
 
 func configInt64(node *ast.GraphNode, key string) int64 {
