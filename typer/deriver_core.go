@@ -228,9 +228,14 @@ func derivePageGatherOutput(node *ast.GraphNode, inputs []ir.PortType, bindings 
 	}
 
 	tail := storageDims[len(storageDims)-2:]
+	storageDType := inputs[0].DType
+
+	if storageDType == dtype.Invalid {
+		storageDType = nodeActivationDType(node)
+	}
 
 	return ir.PortType{
-		DType: inputs[0].DType,
+		DType: storageDType,
 		ShapeSchema: ir.ShapeSchema{
 			Dimensions: append([]ir.Dimension{{Symbol: "KV"}}, tail...),
 		},

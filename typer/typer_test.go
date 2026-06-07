@@ -531,13 +531,12 @@ func TestInferDerivesBatchedEmbeddingOutputShape(t *testing.T) {
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(edgeErrors, convey.ShouldBeEmpty)
 
-		convey.Convey("Then token embedding preserves batch and sequence axes", func() {
+		convey.Convey("Then token embedding preserves the sequence axis", func() {
 			outputDimensions := graph.Nodes[0].OutputType.ShapeSchema.Dimensions
 
-			convey.So(len(outputDimensions), convey.ShouldEqual, 3)
-			convey.So(outputDimensions[0].Symbol, convey.ShouldEqual, "B")
-			convey.So(outputDimensions[1].Symbol, convey.ShouldEqual, "T")
-			convey.So(outputDimensions[2].Static, convey.ShouldEqual, 8)
+			convey.So(len(outputDimensions), convey.ShouldEqual, 2)
+			convey.So(outputDimensions[0].Symbol, convey.ShouldEqual, "T")
+			convey.So(outputDimensions[1].Static, convey.ShouldEqual, 8)
 		})
 	})
 }

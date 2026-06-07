@@ -15,7 +15,7 @@ func graphInputPortType(inputName string) (ir.PortType, bool) {
 	case "input_ids":
 		return ir.PortType{
 			DType:       dtype.Int32,
-			ShapeSchema: shapeSymbols("B", "T"),
+			ShapeSchema: shapeSymbols("T"),
 			Layout:      ir.LayoutContiguous,
 			Kind:        ir.SemanticTokenIndex,
 		}, true
@@ -42,7 +42,7 @@ func graphInputPortType(inputName string) (ir.PortType, bool) {
 		}, true
 	case "key_pages", "value_pages":
 		return ir.PortType{
-			DType:       dtype.Float32,
+			DType:       dtype.Invalid,
 			ShapeSchema: shapeSymbols("L", "P", "S", "KVH", "HD"),
 			Layout:      ir.LayoutContiguous,
 			Kind:        ir.SemanticGeneric,

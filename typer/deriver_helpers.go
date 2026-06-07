@@ -58,6 +58,14 @@ func boundWeightDType(node *ast.GraphNode) dtype.DType {
 	return node.Weights.DType
 }
 
+func nodeActivationDType(node *ast.GraphNode) dtype.DType {
+	if node != nil && node.ValueType.DType.IsFloat() {
+		return node.ValueType.DType
+	}
+
+	return dtype.Float32
+}
+
 func configInt64(node *ast.GraphNode, key string) int64 {
 	if node == nil || node.Attributes == nil {
 		return 0

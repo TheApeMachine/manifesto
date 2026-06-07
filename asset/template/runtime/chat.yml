@@ -33,12 +33,12 @@ state:
       dtype: int32
   - name: write_page_ids
     type: tensor
-    shape: [1]
+    shape: [512]
     config:
       dtype: int32
   - name: write_offsets
     type: tensor
-    shape: [1]
+    shape: [512]
     config:
       dtype: int32
 
