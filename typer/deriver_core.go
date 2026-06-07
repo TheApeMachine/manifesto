@@ -79,7 +79,7 @@ func deriveTimestepEmbeddingOutput(node *ast.GraphNode, inputs []ir.PortType, bi
 	dimensions = append(dimensions, ir.Dimension{Static: embeddingDim})
 
 	return ir.PortType{
-		DType: dtype.Float32,
+		DType: nodeActivationDType(node),
 		ShapeSchema: ir.ShapeSchema{
 			Dimensions: dimensions,
 		},
@@ -206,7 +206,7 @@ func deriveLinearOutput(node *ast.GraphNode, inputs []ir.PortType, bindings ir.S
 	prefix := append([]ir.Dimension(nil), leading[:len(leading)-1]...)
 
 	return ir.PortType{
-		DType:       inputs[0].DType,
+		DType:       nodeActivationDType(node),
 		ShapeSchema: ir.ShapeSchema{Dimensions: append(prefix, ir.Dimension{Static: outFeatures})},
 		Layout:      ir.LayoutContiguous,
 		Kind:        ir.SemanticHiddenState,

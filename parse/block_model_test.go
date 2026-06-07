@@ -22,6 +22,22 @@ system:
 			convey.So(block.WeightSubfolder(), convey.ShouldEqual, "text_encoder")
 		})
 	})
+
+	convey.Convey("Given a model block with from_safetensors metadata", t, func() {
+		raw := []byte(`
+system:
+  topology:
+    from_safetensors:
+      source: black-forest-labs/FLUX.2-klein-4B
+      file: transformer/diffusion_pytorch_model.safetensors
+`)
+		block, err := BlockModelFromYAML(raw)
+		convey.So(err, convey.ShouldBeNil)
+
+		convey.Convey("It should derive the transformer subfolder", func() {
+			convey.So(block.WeightSubfolder(), convey.ShouldEqual, "transformer")
+		})
+	})
 }
 
 func TestBlockModel_TopologyAST(t *testing.T) {

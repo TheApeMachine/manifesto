@@ -636,6 +636,63 @@ func TestInferDerivesModulatedLayerNormOutputShape(t *testing.T) {
 	})
 }
 
+func TestInferModulatedLayerNormPreservesBFloat16Activation(t *testing.T) {
+	convey.Convey("Given BF16 hidden states feeding ModulatedLayerNorm", t, func() {
+		RegisterSpec("test.emit_bf16_hidden", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.BFloat16,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 2},
+							{Static: 3},
+							{Static: 4},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+					Kind:   ir.SemanticHiddenState,
+				}, nil
+			},
+		})
+		RegisterSpec("test.emit_bf16_modulation", OpSpec{
+			Inputs: []ir.PortType{anyTensor()},
+			OutputDeriver: func(node *ast.GraphNode, inputs []ir.PortType, bindings ir.SymbolMap) (ir.PortType, error) {
+				return ir.PortType{
+					DType: dtype.BFloat16,
+					ShapeSchema: ir.ShapeSchema{
+						Dimensions: []ir.Dimension{
+							{Static: 2},
+							{Static: 24},
+						},
+					},
+					Layout: ir.LayoutContiguous,
+				}, nil
+			},
+		})
+
+		graph := &ast.Graph{
+			Inputs: []string{"x"},
+			Nodes: []*ast.GraphNode{
+				{ID: "hidden", Op: "test.emit_bf16_hidden", Inputs: []string{"x"}},
+				{ID: "modulation", Op: "test.emit_bf16_modulation", Inputs: []string{"x"}},
+				{
+					ID:     "norm",
+					Op:     "math.modulated_layernorm",
+					Inputs: []string{"hidden", "modulation"},
+				},
+			},
+		}
+
+		stats, err := Run(graph, Options{})
+
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(stats.Synthesis.CastsInserted, convey.ShouldEqual, 0)
+		convey.So(graph.Nodes[2].InputTypes[0].DType, convey.ShouldEqual, dtype.BFloat16)
+		convey.So(graph.Nodes[2].OutputType.DType, convey.ShouldEqual, dtype.BFloat16)
+	})
+}
+
 func TestInferDerivesGatedResidualOutputShape(t *testing.T) {
 	convey.Convey("Given hidden states and modulation feeding GatedResidual", t, func() {
 		RegisterSpec("test.emit_gated_hidden", OpSpec{

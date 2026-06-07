@@ -98,13 +98,51 @@ func (block *BlockModel) WeightSubfolder() string {
 		return ""
 	}
 
-	directory := filepath.Dir(block.System.Runtime.Model.File)
+	if subfolder := weightDirectory(block.System.Runtime.Model.File); subfolder != "" {
+		return subfolder
+	}
+
+	if spec := block.FromSafeTensorsSpec(); spec != nil {
+		if fileName, ok := spec["file"].(string); ok {
+			if subfolder := weightDirectory(fileName); subfolder != "" {
+				return subfolder
+			}
+		}
+	}
+
+	for _, component := range []componentRef{
+		block.System.Runtime.TextEncoder,
+		block.System.Runtime.Transformer,
+		block.System.Runtime.VAE,
+	} {
+		if subfolder := componentWeightSubfolder(component); subfolder != "" {
+			return subfolder
+		}
+	}
+
+	return ""
+}
+
+func weightDirectory(fileName string) string {
+	directory := filepath.Dir(fileName)
 
 	if directory == "." {
 		return ""
 	}
 
 	return directory
+}
+
+func componentWeightSubfolder(component componentRef) string {
+	if component.Path != "" {
+		return component.Path
+	}
+
+	if subfolder := weightDirectory(component.File); subfolder != "" {
+		return subfolder
+	}
+
+	return ""
 }
 
 /*

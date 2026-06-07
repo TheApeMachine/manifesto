@@ -70,7 +70,7 @@ main:
     config:
       shape: [1, 4096, 128]
       seed: $variables.seed
-      dtype: float32
+      dtype: bfloat16
     out: state.latents
 
   # 5) Build the shifted sigma schedule used by the denoiser.

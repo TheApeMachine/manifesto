@@ -275,7 +275,6 @@ func opUsesDefaultWeight(op string) bool {
 	switch op {
 	case "convolution.conv2d",
 		"embedding.token",
-		"math.batchnorm_denorm",
 		"math.groupnorm",
 		"math.layernorm",
 		"math.rmsnorm",

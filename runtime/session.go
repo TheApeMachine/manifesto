@@ -392,15 +392,21 @@ func materializePagedStateTensor(
 RuntimeExecutionDType returns the floating execution dtype for runtime state.
 */
 func RuntimeExecutionDType(graphs map[string]*ast.Graph) dtype.DType {
+	selected := dtype.Float32
+
 	for _, graph := range graphs {
 		if graph == nil || !graph.ExecutionDType.IsFloat() {
 			continue
 		}
 
-		return graph.ExecutionDType
+		if graph.ExecutionDType == dtype.BFloat16 {
+			return dtype.BFloat16
+		}
+
+		selected = graph.ExecutionDType
 	}
 
-	return dtype.Float32
+	return selected
 }
 
 /*

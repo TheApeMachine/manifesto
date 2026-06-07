@@ -168,7 +168,7 @@ system:
             in: ["gate_${layer}", "up_${layer}"]
             out: ["gate_up_${layer}"]
             config:
-              dim: 2
+              dim: 1
 
           - id: "swiglu_${layer}"
             op: activation.swiglu
@@ -193,11 +193,11 @@ system:
         in: ["h_${prompt_layer_a}", "h_${prompt_layer_b}"]
         out: [prompt_embeds_0]
         config:
-          dim: 2
+          dim: 1
 
       - id: prompt_embeds
         op: shape.concat
         in: [prompt_embeds_0, "h_${prompt_layer_c}"]
         out: [prompt_embeds]
         config:
-          dim: 2
+          dim: 1

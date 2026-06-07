@@ -106,7 +106,7 @@ var specTable = map[string]OpSpec{
 	},
 	"math.modulated_layernorm": {
 		Inputs: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("N"), Layout: ir.LayoutContiguous, Kind: ir.SemanticHiddenState},
+			activationTensor(),
 			anyTensor(),
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
@@ -114,10 +114,6 @@ var specTable = map[string]OpSpec{
 	"math.batchnorm_denorm": {
 		Inputs: []ir.PortType{
 			anyTensor(),
-		},
-		WeightTypes: []ir.PortType{
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
-			{DType: dtype.Float32, ShapeSchema: shapeSymbols("C"), Layout: ir.LayoutContiguous},
 		},
 		OutputDeriver: deriveSameAsFirstInput(ir.SemanticHiddenState),
 	},

@@ -10,25 +10,31 @@ graphInputPortType returns a concrete PortType for generic graph boundary
 names used by paged-decode manifests. Names outside this set use the
 permissive anyTensor() default.
 */
-func graphInputPortType(inputName string) (ir.PortType, bool) {
+func graphInputPortType(inputName string, executionDType dtype.DType) (ir.PortType, bool) {
+	activationDType := dtype.Float32
+
+	if executionDType.IsFloat() {
+		activationDType = executionDType
+	}
+
 	switch inputName {
 	case "input_ids":
 		return ir.PortType{
 			DType:       dtype.Int32,
-			ShapeSchema: shapeSymbols("T"),
+			ShapeSchema: shapeSymbols("N"),
 			Layout:      ir.LayoutContiguous,
 			Kind:        ir.SemanticTokenIndex,
 		}, true
 	case "hidden_states", "latents":
 		return ir.PortType{
-			DType:       dtype.Float32,
+			DType:       activationDType,
 			ShapeSchema: shapeSymbols("B", "T", "D"),
 			Layout:      ir.LayoutContiguous,
 			Kind:        ir.SemanticHiddenState,
 		}, true
 	case "encoder_hidden_states", "text_embedding":
 		return ir.PortType{
-			DType:       dtype.Float32,
+			DType:       activationDType,
 			ShapeSchema: shapeSymbols("B", "C", "E"),
 			Layout:      ir.LayoutContiguous,
 			Kind:        ir.SemanticHiddenState,
