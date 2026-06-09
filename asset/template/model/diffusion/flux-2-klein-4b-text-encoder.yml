@@ -168,7 +168,7 @@ system:
             in: ["gate_${layer}", "up_${layer}"]
             out: ["gate_up_${layer}"]
             config:
-              dim: 1
+              dim: -1
 
           - id: "swiglu_${layer}"
             op: activation.swiglu

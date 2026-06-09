@@ -8,7 +8,7 @@ initial_width: 220
 inputs:
   - name: x
     type: tensor
-    description: Input [batch, num_heads, seq_len, head_dim]
+    description: Input [batch, seq_len, num_heads, head_dim]
   - name: position
     type: tensor
     description: Optional int32 sequence position offset supplied by the manifest
@@ -80,7 +80,7 @@ bind:
     - ref: input.x.pointer
     - ref: output.y.pointer
     - ref: input.x.shape
-      dim: 0
+      dim: 1
     - ref: input.x.shape
       dim: -2
     - ref: input.x.shape
@@ -114,7 +114,7 @@ bind:
         - ref: input.x.pointer
         - ref: output.y.pointer
         - ref: input.x.shape
-          dim: 0
+          dim: 1
         - ref: input.x.shape
           dim: -2
         - ref: input.x.shape
